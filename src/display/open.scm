@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Graphics Windows
 
 ;;; The "hardware" OPEN
@@ -38,8 +39,7 @@ USA.
 (define *frame-y-position* 0)
 (define *frame-width* (if (eq? 'unix microcode-id/operating-system) 400 100))
 (define *frame-height* (if (eq? 'unix microcode-id/operating-system) 400 100))
-
-
+
 (define (make-display-frame #!optional xmin xmax ymin ymax
 			    frame-width frame-height
 			    frame-x-position frame-y-position
@@ -71,11 +71,14 @@ USA.
 	   (if (default-object? display)
 	       (make-window frame-width frame-height frame-x frame-y)
 	       (make-window frame-width frame-height frame-x frame-y display))))
+      ;; Make window set the virtual coordinate limits to the pixel values.
+      ;; The following resets the virtual coordinate limits to user values.
       (graphics-set-coordinate-limits window xmin ymin xmax ymax)
-      (graphics-set-clip-rectangle window xmin ymin xmax ymax)
+      ;; Unclear if the following is necessary, given the previous command.
+      ;; (graphics-set-clip-rectangle window xmin ymin xmax ymax)
       (let ((name (graphics-type-name (graphics-type #f))))
 	     (case name
-	       ((X)
+	       ((x)
 		(graphics-operation window 'set-border-color "green")
 		(graphics-operation window 'set-mouse-color "green"))
 	       ((WIN32) 'nothing-to-do )
@@ -92,7 +95,7 @@ USA.
   (let ((window
 	 (let ((name (graphics-type-name (graphics-type #f))))
 	   (case name
-	     ((X)
+	     ((x)
 	      (if (default-object? display) (set! display #f))
 	      (make-window/X11 width height x y display))
 	     ((WIN32)
@@ -105,19 +108,24 @@ USA.
 	      (make-window/OS2 width height x y))
 	     (else
 	      (error "Unsupported graphics type:" name))))))
+    ;; Set the virtual coordinate limits to the pixel values.
+    ;; They will be reset in make-display-frame above.
     (graphics-set-coordinate-limits window 0 (- (- height 1)) (- width 1) 0)
     ;;(restore-focus-to-editor)
     window))
+
+;;; This is a kludge to fix a bug in 10.1.4.
+;;; (import-x11)
 
 (define (make-window/X11 width height x y #!optional display)
   (if (default-object? display) (set! display #f))
   (let ((window
-	 (make-graphics-device 'X 
+	 (make-graphics-device 'x
 			       display
 			       (x-geometry-string x y width height)
 			       true)))
     ;; Prevent this window from receiving the keyboard focus.
-    (if (not (string-ci=? "MacOSX" microcode-id/operating-system-variant))
+    (if (not (string-ci=? "OS X" microcode-id/operating-system-variant))
 	(x-graphics/disable-keyboard-focus window))
     ;; Inform the window manager that this window does not do any
     ;; keyboard input.
@@ -158,14 +166,13 @@ USA.
 	((number? name) (set! name (number->string name)))
 	(else (error "Window name must be string")))
   (graphics-operation window 'set-window-name name)
-  (graphics-operation win 'set-icon-name name)
+  (graphics-operation window 'set-icon-name name)
   name)
 
-
 (define (resize-window window width height)
   (let ((name (graphics-type-name (graphics-type window))))
     (case name
-      ((X WIN32) (graphics-operation window 'RESIZE-WINDOW width height))
+      ((x WIN32) (graphics-operation window 'RESIZE-WINDOW width height))
       ((OS/2) (graphics-operation window 'SET-WINDOW-SIZE width height))
       (else (error "Unsupported graphics type:" name)))))
 
@@ -174,6 +181,22 @@ USA.
     (lambda (x1 y1 x2 y2)
       (newline)
       (display `("width:" ,(+ (- x2 x1) 1) "  height:" ,(+ (- y1 y2) 1))))))
+
+(define (window-coordinates window)
+  (call-with-values (lambda () (graphics-coordinate-limits window))
+    (lambda (x1 y1 x2 y2)
+      (list x1 x2 y1 y2))))
+
+(define (window-pixel-coordinates window)
+  (call-with-values (lambda () (graphics-device-coordinate-limits window))
+    (lambda (x1 y1 x2 y2)
+      (list x1 x2 y1 y2))))
+
+(define (window-size window)
+  (call-with-values (lambda () (graphics-device-coordinate-limits window))
+    (lambda (x1 y1 x2 y2)
+      (list (+ (- x2 x1) 1)
+	    (+ (- y1 y2) 1)))))
 
 ;;; Mouse stuff
 
@@ -187,10 +210,9 @@ USA.
   ;;; cont = (lambda (x y button) ...)
   (x-graphics/discard-events window)
   (graphics-operation window 'set-mouse-shape requesting-input-mouse-shape)
-  ((x-graphics/read-button window)
-   (lambda (x y button)
-     (graphics-operation window 'set-mouse-shape standard-mouse-shape)
-     (cont x y button))))
+  (let-values (((x y button) (x-graphics/read-button window)))
+    (graphics-operation window 'set-mouse-shape standard-mouse-shape)
+    (cont x y button)))
 
 
 ;;; For gnuplot output
@@ -211,6 +233,8 @@ USA.
 	     (set! *gnuplotting* #f)))
   'ok)
 
+;;; Useful plotter procedures.
+
 ;;; For JW
 
 (define frame make-display-frame)
@@ -256,8 +280,16 @@ USA.
 		      (exact->inexact y0)
 		      (exact->inexact x1)
 		      (exact->inexact y1)))
+
+;;; Function plotters
 
-(define (plot-function window f x0 x1 dx)
+(define (plot-function window f #!optional x0 x1 dx)
+  (if (default-object? x0)
+      (let ((bounds (window-coordinates window))
+	    (size (window-size window)))
+	(set! x0 (car bounds))
+	(set! x1 (cadr bounds))
+	(set! dx (/ (- x1 x0) (car size)))))
   (if *gnuplotting* (newline *gnuplotting*))
   (let loop ((x x0) (fx (f x0)))
     (if *gnuplotting*
@@ -271,7 +303,13 @@ USA.
 	(if (< (* (- nx x0) (- nx x1)) 0.)
 	    (loop nx nfx))))))
 
-(define (plot-inverse window f y0 y1 dy)
+(define (plot-inverse window f #!optional y0 y1 dy)
+  (if (default-object? y0)
+      (let ((bounds (window-coordinates window))
+	    (size (window-size window)))
+	(set! y0 (caddr bounds))
+	(set! y1 (cadddr bounds))
+	(set! dy (/ (- y1 y0) (cadr size)))))
   (if *gnuplotting* (newline *gnuplotting*))
   (let loop ((y y0) (fy (f y0)))
     (if *gnuplotting*
@@ -284,25 +322,13 @@ USA.
         (plot-line-internal window fy y nfy ny)
         (if (< (* (- ny y0) (- ny y1)) 0.)
             (loop ny nfy))))))
-
+
 (define (plot-parametric win f a b dx)
   (if *gnuplotting* (newline *gnuplotting*))
   (let loop ((x a))
     (let ((fx (f x)))
       (plot-point win (car fx) (cdr fx))
       (if (< x b) (loop (+ x dx))))))
-
-#|
-(define (plot-parametric-fill win f a b near?)
-  (if *gnuplotting* (newline *gnuplotting*))
-  (let loop ((a a) (xa (f a)) (b b) (xb (f b)))
-    (let ((m (/ (+ a b) 2)))
-      (let ((xm (f m)))
-	(plot-point win (car xm) (cdr xm))
-	(if (not (and (near? xa xm) (near? xb xm)))
-	    (begin (loop a xa m xm)
-		   (loop m xm b xb)))))))
-|#
 
 (define (plot-parametric-fill win f a b near?)
   (if *gnuplotting* (newline *gnuplotting*))
@@ -318,15 +344,8 @@ USA.
 	    (if (not (near? xb xm))
 		(loop m xm b xb)))))))
 
-
-;;; Chap 4
-(define make-point cons)
-(define abscissa car)
-(define ordinate cdr)
-
-
 (define *allowable-roundoffs* 10)
-
+
 (define (plot-fun win f a b eps)
   (if *gnuplotting* (newline *gnuplotting*))
   (plot-parametric-fill 
@@ -358,6 +377,12 @@ USA.
 	    (square ((principal-value pi) 
 		     (- (cdr x) (cdr y)))))
 	 eps^2))))
+
+;;; For compatibility with book
+
+(define make-point cons)
+(define abscissa car)
+(define ordinate cdr)
 
 #|
 ;;; for example
@@ -392,40 +417,31 @@ USA.
 
 (define (plot-xy window xs ys)
   (if *gnuplotting* (newline *gnuplotting*))
-  (cond ((or (eq? window 'new) (eq? window #t))
-	 (set! plotting-window
-	       (make-display-frame 0.0 1.0 0.0 1.0)))
-	((or (eq? window 'old) (eq? window 'clear) (eq? window #f))
-	 'done)
-	((eq? window plotting-window)
-	 'done)
-	(else
-	 (if (graphics-device? plotting-window)
-	     (graphics-close plotting-window))
-	 (set! plotting-window window)))
-  (if (not (graphics-device? plotting-window))
-      (error "Plotting window is not initialized"))
-  (if (eq? window 'clear)
-      (graphics-clear plotting-window))
-
   (if (vector? xs) (set! xs (vector->list xs)))
   (if (vector? ys) (set! ys (vector->list ys)))
   (let ((minx (apply min xs))
 	(maxx (apply max xs))
 	(miny (apply min ys))
 	(maxy (apply max ys)))
-    (let ((dx (- maxx minx))
-	  (dy (- maxy miny)))
-      (if (zero? dx)
-	  "Range of x is zero."
-	  (if (zero? dy)
-	      "Range of y is zero."
-	      (map (lambda (x y)
-		     (plot-point plotting-window
-				 (/ (- x minx) dx)
-				 (/ (- y miny) dy)))
-		   xs
-		   ys))))
+    (cond ((or (eq? window 'new) (eq? window #t))
+	   (set! plotting-window
+		 (make-display-frame minx maxx miny maxy)))
+	  ((or (eq? window 'old) (eq? window 'clear) (eq? window #f))
+	   'done)
+	  ((eq? window plotting-window)
+	   'done)
+	  (else
+	   (if (graphics-device? plotting-window)
+	       (graphics-close plotting-window))
+	   (set! plotting-window window)))
+    (if (not (graphics-device? plotting-window))
+	(error "Plotting window is not initialized"))
+    (if (eq? window 'clear)
+	(graphics-clear plotting-window))
+    (for-each (lambda (x y)
+		(plot-point plotting-window x y))
+	      xs
+	      ys)
     (list minx maxx miny maxy)))
 
 #|
@@ -437,7 +453,11 @@ USA.
 (define ys (map sin xs))
 
 (plot-xy 'new xs ys)
+
+(plot-xy 'new ys xs)
 |#
+
+;;; Useless?
 
 (define (plot-f window f)
   (if *gnuplotting* (newline *gnuplotting*))

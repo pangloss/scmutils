@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;;  Utilities for manipulating symbolic expressions
 
 (declare (usual-integrations))
@@ -236,19 +237,19 @@ USA.
   (let ((u2 (unsyntax (procedure-lambda f))))
     (and (pair? u2)
 	 (cond ((eq? (car u2) 'named-lambda) (caadr u2))
-	       ((eq? (car u2) 'lambda) `(??? ,@(cadr u2)))
+	       ((eq? (car u2) 'lambda) `(lambda ,(cadr u2) ???))
 	       (else
 		(error "Unknown procedure type" f))))))
 
 (define (procedure-expression f)
   (or (eq-get f 'function-name)
-      (procedure-name f)
       (object-name f
 		   user-generic-environment
 		   generic-environment
 		   rule-environment
 		   numerical-environment
 		   scmutils-base-environment)
+      (procedure-name f)
       '???))
 
 
@@ -318,24 +319,34 @@ USA.
 
 (define (expr:< expr1 expr2)
   (cond ((null? expr1)
-	 (if (null? expr2) #f #t))
+	 (if (null? expr2)
+             #f
+             #t))
 	((null? expr2) #f)
 	((real? expr1)
-	 (if (real? expr2) (< expr1 expr2) #f))
+	 (if (real? expr2)
+             (< expr1 expr2)
+             (or (symbol? expr2) (string? expr2) (pair? expr2) (vector? expr2))))
 	((real? expr2) #f)
 	((symbol? expr1)
 	 (if (symbol? expr2)
-	     (variable<? expr1 expr2)
-	     #f))
+	     (symbol<? expr1 expr2)
+	     (or (string? expr2) (pair? expr2) (vector? expr2))))
 	((symbol? expr2) #f)
+        ((string? expr1)
+	 (if (string expr2)
+	     (string:<? expr1 expr2)
+	     (or (pair? expr2) (vector? expr2))))
+	((string? expr2) #f)
 	((pair? expr1)
-	 (cond ((pair? expr2)
-		(cond ((fix:< (length expr1) (length expr2)) #t)
-		      ((expr:= (car expr1) (car expr2))
-		       (expr:< (cdr expr1) (cdr expr2)))
-		      ((expr:< (car expr1) (car expr2)) #t)
-		      (else #f)))
-	       (else #f)))
+	 (if (pair? expr2)
+             (let ((n1 (length expr1)) (n2 (length expr2)))
+               (cond ((fix:< n1 n2) #t)
+                     ((fix:< n2 n1) #f)
+                     ((expr:< (car expr1) (car expr2)) #t)
+                     ((expr:< (car expr2) (car expr1)) #f)
+                     (else (expr:< (cdr expr1) (cdr expr2)))))
+             (vector? expr2)))
 	((pair? expr2) #f)
 	((vector? expr1)
 	 (cond ((vector? expr2)
@@ -350,19 +361,18 @@ USA.
 				 ((expr:< (vector-ref expr1 i)
 					  (vector-ref expr2 i))
 				  #t)
-				 ((expr:= (vector-ref expr1 i)
+				 ((equal? (vector-ref expr1 i)
 					  (vector-ref expr2 i))
 				  (lp (fix:+ i 1)))
 				 (else #f)))))
 		      (else #f)))
 	       (else #f)))
 	((vector? expr2) #f)
-	((string? expr1)
-	 (if (string expr2)
-	     (string:<? expr1 expr2)
-	     #f))
-	((string? expr2) #f)
+        ;;This one is pretty weird...
 	(else
 	 (< (hash expr1) (hash expr2)))))
 
 (define expr:= equal?)
+
+
+

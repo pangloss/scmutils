@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Interface system for QUADRATURE 
 
 (declare (usual-integrations))
@@ -200,8 +201,8 @@ USA.
 	    (memq upper-limit *infinities*))
 	(evaluate-improper-integral method
 				    integrand
-				    upper-limit
 				    lower-limit
+				    upper-limit
 				    allowable-error)
 	  
 	(case method
@@ -212,19 +213,19 @@ USA.
 			   allowable-error))
 
 	  ((CLOSED-CLOSED)
-	   (integrate-closed-closed-1 integrand
-				      lower-limit upper-limit
-				      allowable-error))
+	   (integrate-closed-closed integrand
+                                    lower-limit upper-limit
+                                    allowable-error))
 
 	  ((CLOSED-OPEN)
-	   (integrate-closed-open-1 integrand
-				    lower-limit upper-limit
-				    allowable-error))
+	   (integrate-closed-open integrand
+                                  lower-limit upper-limit
+                                  allowable-error))
 
 	  ((OPEN-CLOSED)
-	   (integrate-open-closed-1 integrand
-				    lower-limit upper-limit
-				    allowable-error))
+	   (integrate-open-closed integrand
+                                  lower-limit upper-limit
+                                  allowable-error))
 
 	  ((OPEN-OPEN)
 	   (integrate-open-open integrand
@@ -245,7 +246,7 @@ USA.
 
 
 #|
-(define (evaluate-improper-integral method integrand upper-limit lower-limit allowable-error)
+(define (evaluate-improper-integral method integrand lower-limit upper-limit allowable-error)
   (let ((new-integrand
 	 (lambda (theta)
 	   (/ (integrand (tan theta))
@@ -256,49 +257,49 @@ USA.
        (case upper-limit
 	 ((:+infinity)
 	  (integrate-open-open new-integrand
-			       -pi/2 +pi/2
+			       :-pi/2 :+pi/2
 			       allowable-error))
 	 ((:-infinity) 0.0)
 	 (else
 	  (if (memq method '(open-open closed-open))
 	      (integrate-open-open new-integrand
-				   -pi/2 (atan upper-limit)
+				   :-pi/2 (atan upper-limit)
 				   allowable-error)
 	      (integrate-open-closed new-integrand
-				     -pi/2 (atan upper-limit)
+				     :-pi/2 (atan upper-limit)
 				     allowable-error)))))
       ((:+infinity)
        (case upper-limit
 	 ((:+infinity) 0.0)
 	 ((:-infinity)
 	  (- (integrate-open-open new-integrand
-				  -pi/2 +pi/2
+				  :-pi/2 :+pi/2
 				  allowable-error)))
 	 (else
 	  (if (memq method '(open-open open-closed))
 	      (- (integrate-open-open new-integrand
-				      (atan upper-limit) +pi/2
+				      (atan upper-limit) :+pi/2
 				      allowable-error))
 	      (- (integrate-closed-open new-integrand
-					(atan upper-limit) +pi/2
+					(atan upper-limit) :+pi/2
 					allowable-error))))))
       (else
        (case upper-limit
 	 ((:+infinity)
 	  (if (memq method '(open-open open-closed))
 	      (integrate-open-open new-integrand
-				   (atan lower-limit) +pi/2
+				   (atan lower-limit) :+pi/2
 				   allowable-error)
 	      (integrate-closed-open new-integrand
-				     (atan lower-limit) +pi/2
+				     (atan lower-limit) :+pi/2
 				     allowable-error)))
 	 ((:-infinity)
 	  (if (memq method '(open-open open-closed))
 	      (- (integrate-open-open new-integrand
-				      -pi/2 (atan lower-limit)
+				      :-pi/2 (atan lower-limit)
 				      allowable-error))
 	      (- (integrate-closed-open new-integrand
-					-pi/2 (atan lower-limit)
+					:-pi/2 (atan lower-limit)
 					allowable-error)))))))))
 |#
 
@@ -306,7 +307,8 @@ USA.
 
 (define *improper-integral-breakpoint* +1.0)
 
-(define (evaluate-improper-integral method integrand upper-limit lower-limit allowable-error)
+(define (evaluate-improper-integral method integrand lower-limit upper-limit allowable-error)
+  ;; method is ignored here
   (let ((new-integrand
 	 (lambda (t)
 	   (/ (integrand (/ 1.0 t))

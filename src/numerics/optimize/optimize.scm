@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Top-level optimization defaults
 
 (declare (usual-integrations))
@@ -52,7 +53,7 @@ USA.
 			nelder-maxiter)))
       (if (eq? 'ok (car result))
 	  (vector->list (caadr result))
-	  (error "Minimizer did not converge")))))
+	  (error "Minimizer did not converge" result)))))
 |#
 
 
@@ -67,8 +68,8 @@ USA.
       (if (eq? 'ok (car result))
 	  ((vector->parameters parameters)
 	   (caadr result))
-	  (error "Minimizer did not converge")))))
-
+	  (error "Minimizer did not converge" result)))))
+
 (define (parameters->vector p)
   (define (flatten x)
     (cond ((number? x) (list x))
@@ -83,7 +84,7 @@ USA.
 	       (append-map flatten x)))
 	  (else
 	   (error "Non-numerical data in optimizer" p x))))
-  (if (for-all? p number?)
+  (if (and (list? p) (for-all? p number?))
       (list->vector p)
       (list->vector (flatten p))))
 
@@ -93,8 +94,7 @@ USA.
        (up 3.5 (down 5 1.3) 6)))
 ;Value: #(1 2.3 4 3.5 5 1.3 6)
 |#
-
-
+
 (define ((vector->parameters prototype) vect)
   (let ((cur 0))
     (let plp ((proto prototype))

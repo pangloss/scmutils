@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;;                      Structures
 
 (declare (usual-integrations))
@@ -274,7 +275,7 @@ USA.
 	   (let ((n (vector-length thing)))
 	     (let lp ((i 0))
 	       (cond ((fix:= i n) #f)
-		     ((tlp (vector-ref thing i)) #t)
+                     ((tlp (vector-ref thing i)))
 		     (else (lp (fix:+ i 1)))))))
 	  ((structure? thing)
 	   (let ((n (s:length thing)))
@@ -291,8 +292,10 @@ USA.
 			#f
 			(tlp v))))
 		 ((list? thing)
-		  (there-exists? thing tlp))
-		 (else (tlp (cdr thing)))))
+		  (any tlp thing))
+		 (else
+                  (or (tlp (car thing))
+                      (tlp (cdr thing))))))
 	  (else #f))))
 
 (define (s:arity v) (v:arity (s:->vector v)))
@@ -1012,18 +1015,18 @@ USA.
 (define (scalar/tensor x s)
   (g:* x (s:invert s)))
 
-(define (solve-linear-left M product)
+(define (s:solve-linear-left M product)
   (let ((cp (compatible-shape product)))
     (let ((cr (compatible-shape (g:* cp M))))
       (g:* (s:inverse cp M cr) product))))
 
-(define (solve-linear-right product M)
+(define (s:solve-linear-right product M)
   (let ((cp (compatible-shape product)))
     (let ((cr (compatible-shape (g:* M cp))))
       (g:* product (s:inverse cr M cp)))))
 
 (define (s:divide-by-structure rv s)
-  (solve-linear-left s rv))
+  (s:solve-linear-left s rv))
 
 #|
 ;;; Test cases
@@ -1121,10 +1124,19 @@ USA.
 
 
 (assign-operation 'invert             s:invert                   2-tensor?)
-(assign-operation '/   scalar/tensor  scalar?                    2-tensor?)
 
-(assign-operation '/   s:divide-by-structure          structure?  structure?)
-(assign-operation 'solve-linear solve-linear-left     structure?  structure?)
+(assign-operation '/                   scalar/tensor                   scalar?     2-tensor?)
+(assign-operation '/                   s:divide-by-structure           structure?  structure?)
+
+(assign-operation 'solve-linear-right  scalar/tensor                   scalar?     2-tensor?)
+(assign-operation 'solve-linear-right  s:solve-linear-right            structure?  structure?)
+
+(assign-operation 'solve-linear-left   (lambda (x y) (scalar/tensor y x))   2-tensor?     scalar?)
+(assign-operation 'solve-linear-left   s:solve-linear-left             structure?  structure?)
+
+(assign-operation 'solve-linear        (lambda (x y) (scalar/tensor y x))   2-tensor?     scalar?)
+(assign-operation 'solve-linear        s:solve-linear-left             structure?  structure?)
+
 
 (define (s:determinant s)
   (m:determinant (structure->matrix s)))

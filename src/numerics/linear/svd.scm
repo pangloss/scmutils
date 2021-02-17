@@ -1,35 +1,35 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Linear System Solver -- SVD -- Singular-Value Decomposition
 
 ;;; This file contains the following definitions:
 ;;;
-;;; (svd-solve-linear-system A-matrix b-vector) => x-vector
-;;; (svd-matrix-inverse A b succeed fail)
+;;; (svd-invert A b succeed fail)
 ;;;
 ;;; (svd A continue)
 ;;;      where continue = (lambda (U SIGMA V W)
@@ -49,6 +49,12 @@ USA.
 ;;;  the null space of A.
 ;;;    Note: These are solutions of the homogeneous equation A*x = 0
 
+;;; Note: the following moved.
+;;; (svd-solve-linear-system A-matrix b-vector) => x-vector
+;;;   This is now in the file svd-solve-linear-system.scm
+
+(declare (usual-integrations))
+
 (define (svd a continue)
   (svd-internal (matrix->array a)
     (lambda (u sigma v w)
@@ -56,7 +62,29 @@ USA.
 		(array->matrix sigma)
 		(array->matrix v)
 		w))))
-
+
+(define (svd-invert a #!optional eps)
+  (if (default-object? eps) (set! eps 1e-15))
+  (svd a
+       (lambda (u sigma v w)
+	 (let ((inverted-w
+		(let ((wmin
+		       (cond ((number? eps)
+			      (* eps (apply max (vector->list w))))
+			     ((procedure? eps)
+			      (* (eps w) (apply max (vector->list w))))
+			     (else
+			      (error "Bad cutoff -- SVD" eps)))))
+		  (make-initialized-vector (vector-length w)
+		    (lambda (i) 
+		      (let ((wi (vector-ref w i)))
+			(if (< wi wmin) 0 (/ 1 wi))))))))
+	   (matrix*matrix v
+			  (matrix*matrix (m:make-diagonal inverted-w)
+					 (m:transpose u)))))))
+
+#|
+;;; See svd-least-squares.scm 
 (define (svd-least-squares a b #!optional eps)
   (if (default-object? eps) (set! eps 1e-15))
   (svd a
@@ -79,27 +107,7 @@ USA.
 			   inverted-w))))))
 
 (define svd-solve-linear-system svd-least-squares)
-
-
-(define (svd-invert a #!optional eps)
-  (if (default-object? eps) (set! eps 1e-15))
-  (svd a
-       (lambda (u sigma v w)
-	 (let ((inverted-w
-		(let ((wmin
-		       (cond ((number? eps)
-			      (* eps (apply max (vector->list w))))
-			     ((procedure? eps)
-			      (* (eps w) (apply max (vector->list w))))
-			     (else
-			      (error "Bad cutoff -- SVD" eps)))))
-		  (make-initialized-vector (vector-length w)
-		    (lambda (i) 
-		      (let ((wi (vector-ref w i)))
-			(if (< wi wmin) 0 (/ 1 wi))))))))
-	   (matrix*matrix v
-			  (matrix*matrix (m:make-diagonal inverted-w)
-					 (m:transpose u)))))))
+|#
 
 ;;;              Singular-Value Decomposition
 
@@ -568,7 +576,7 @@ USA.
 (define (test n #!optional m)
   (if (default-object? m)
       (set! m 100))
-  (let ((h (lu-hilbert n)))
+  (let ((h (hilbert n)))
     (write-line `(lu ,(matnorm
 		       (matrix-matrix (matrix*matrix h (lu-invert h))
 				      (m:make-identity n)))))

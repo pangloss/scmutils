@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;;       General Recursive Simplifier Maker
 
 ;;; Given a set of operations, this procedure makes a recursive
@@ -75,9 +76,13 @@ USA.
 
     ;; Set up new analysis
     (define (new-analysis)		
+      (set! auxiliary-variable-table (make-equal-hash-table))
+      (set! reverse-table (make-key-weak-eq-hash-table))
+      #|
       (set! auxiliary-variable-table
 	    ((weak-hash-table/constructor equal-hash-mod equal? #t)))
       (set! reverse-table (make-eq-hash-table))
+      |#
       (set! uorder '())
       (set! priority '())
       'done)
@@ -111,7 +116,8 @@ USA.
 	    (if (and (memq (operator sexpr) known-operators)
 		     (not (and *inhibit-expt-simplify*
 			       (expt? sexpr)
-			       (not (exact-integer? (cadr (operands sexpr)))))))
+			       (not (exact-integer?
+                                     (cadr (operands sexpr)))))))
 		sexpr
 		(let ((as-seen (expression-seen sexpr)))
 		  (if as-seen
@@ -202,11 +208,20 @@ USA.
   (make-analyzer fpf:->expression fpf:expression-> fpf:operators-known))
 
 ;;(define fpf:simplify (default-simplifier fpf:analyzer))
-;;(define fpf:simplify (expression-simplifier fpf:analyzer))
+(define fpf:simplify (expression-simplifier fpf:analyzer))
+#|
+(define fpf:simplify
+  (compose canonical-copy
+           (expression-simplifier fpf:analyzer)))
+(define fpf:simplify
+  (compose canonical-copy
+           (expression-simplifier fpf:analyzer)
+           canonical-copy))
 (define fpf:simplify
   (hash-memoize-1arg
    (compose canonical-copy
 	    (expression-simplifier fpf:analyzer))))
+|#
 
 (define pcf:analyzer
   (make-analyzer pcf:->expression pcf:expression-> pcf:operators-known))
@@ -214,6 +229,13 @@ USA.
 ;;(define pcf:simplify (default-simplifier pcf:analyzer))
 (define pcf:simplify (expression-simplifier pcf:analyzer))
 #|
+(define pcf:simplify
+  (compose canonical-copy
+           (expression-simplifier pcf:analyzer)))
+(define pcf:simplify
+  (compose canonical-copy
+           (expression-simplifier pcf:analyzer)
+           canonical-copy))
 (define pcf:simplify
   (hash-memoize-1arg
    (compose canonical-copy
@@ -224,11 +246,20 @@ USA.
   (make-analyzer rcf:->expression rcf:expression-> rcf:operators-known))
 
 ;;(define rcf:simplify (default-simplifier rcf:analyzer))
-;;(define rcf:simplify (expression-simplifier rcf:analyzer))
+(define rcf:simplify (expression-simplifier rcf:analyzer))
+#|
+(define rcf:simplify
+  (compose canonical-copy
+           (expression-simplifier rcf:analyzer)))
+(define rcf:simplify
+  (compose canonical-copy
+           (expression-simplifier rcf:analyzer)
+           canonical-copy))
 (define rcf:simplify
   (hash-memoize-1arg
    (compose canonical-copy
 	    (expression-simplifier rcf:analyzer))))
+|#
 
 #|
 ((initializer rcf:analyzer))

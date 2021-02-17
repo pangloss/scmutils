@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;; The advance-generator is used with 1-step adaptive integrators to
 ;;;  to advance a state by a given increment in the independent
 ;;;  variable, in the face of variable-stepsize advancers.
@@ -169,8 +170,14 @@ USA.
 
 ;;; Error measures
 
-;;; Can specify for each component the breakpoints between relative
-;;; error and absolute error measure and can specify the weights.
+(define (parse-error-measure tolerance-specification #!optional multiplier)
+  (if (default-object? multiplier) (set! multiplier 1.0))
+  (cond ((number? tolerance-specification) ;uniform relative error -- scale = 1
+	 (max-norm (* multiplier tolerance-specification)))
+	((procedure? tolerance-specification) ;arbitrary user-supplied procedure
+	 tolerance-specification)
+	(else
+	 (error "Unknown tolerance specification -- PARSE-ERROR-MEASURE"))))
 
 (define (vector-metric summarize accumulate each-component)
   (define (the-metric v1 v2)
@@ -185,8 +192,16 @@ USA.
 					    i)
 			    accumulation))))))
   the-metric)
+
+;;; Can specify for each component the breakpoints between relative
+;;; error and absolute error measure and can specify the weights.
 
 (define *norm-breakpoint* 1e-10)
+
+;;; The lp-norm is not the traditional one.  It has an extra n in the
+;;; denominator to make it comparable in size to the max-norm with
+;;; unity weights.  (Of course, as p gets very large the lp-norm will
+;;; approach the same value as the max-norm.)
 
 (define (lp-norm p #!optional tolerance breakpoints weights)
   (if (default-object? tolerance)
@@ -195,18 +210,20 @@ USA.
       (set! breakpoints (lambda (i) *norm-breakpoint*)))
   (if (default-object? weights)
       (set! weights (lambda (i) 1.0)))
-  (vector-metric (lambda (a n)
-		   (* (expt a (/ 1 p))
-		      (/ 2
-			 (* (n:sigma weights 0 (fix:- n 1))
-			    tolerance))))
-		 +
-		 (lambda (x y i)
-		   (* (expt (/ (magnitude (- x y))
-			       (+ (+ (magnitude x) (magnitude y))
-				  (* 2.0 (breakpoints i))))
-			    p)
-		      (weights i)))))
+  (let ((q (/ 1 p))
+        (tt (/ 2 tolerance)))
+    (vector-metric (lambda (a n)
+                     (expt (/ a
+                              (* n (n:sigma weights 0 (fix:- n 1))))
+                           q))
+                   +
+                   (lambda (x y i)
+                     (* (expt (* (/ (magnitude (- x y))
+                                    (+ (+ (magnitude x) (magnitude y))
+                                       (* 2.0 (breakpoints i))))
+                                 tt)
+                              p)
+                        (weights i))))))
 
 (define (max-norm #!optional tolerance breakpoints weights)
   (if (default-object? tolerance)
@@ -215,26 +232,15 @@ USA.
       (set! breakpoints (lambda (i) *norm-breakpoint*)))
   (if (default-object? weights)
       (set! weights (lambda (i) 1.0)))
-  (vector-metric (lambda (a n)
-		   (* a (/ 2 tolerance)))
-		 max
-		 (lambda (x y i)
-		   (* (/ (magnitude (- x y))
-			 (+ (+ (magnitude x) (magnitude y))
-			    (* 2.0 (breakpoints i))))
-		      (weights i)))))
+  (let ((tt (/ 2 tolerance)))
+    (vector-metric (lambda (a n) (* a tt))
+                   max
+                   (lambda (x y i)
+                     (* (/ (magnitude (- x y))
+                           (+ (+ (magnitude x) (magnitude y))
+                              (* 2.0 (breakpoints i))))
+                        (weights i))))))
 
-(define (parse-error-measure tolerance-specification #!optional multiplier)
-  (if (default-object? multiplier) (set! multiplier 1.0))
-  (cond ((number? tolerance-specification) ;uniform relative error -- scale = 1
-	 (max-norm (* multiplier tolerance-specification)))
-	((procedure? tolerance-specification) ;arbitrary user-supplied procedure
-	 tolerance-specification)
-	(else
-	 (error "Unknown tolerance specification -- PARSE-ERROR-MEASURE"))))
-
-
-
 ;;; For integrators that need a partial Jacobian, we need to be able
 ;;; to clip and pad vectors.
 
@@ -284,4 +290,3 @@ USA.
   (adjoin-to-list! name integrator-table 'integrators)
   (put! integrator-table maker-procedure name 'maker)
   (put! integrator-table needs name 'needs))
-	

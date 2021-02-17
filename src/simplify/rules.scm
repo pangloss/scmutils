@@ -1,33 +1,33 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Rule systems for simplification.
 ;;;  Written by GJS in the 1980s, edited by Mira Wilczek in summer 2002.
 ;;;  Edited for a new version in january 2005.
-
 (declare (usual-integrations))
 
 ;;; Default is simplifier lives dangerously.
@@ -35,6 +35,16 @@ USA.
 ;;; allows (log (exp x)) => x 
 ;;;  can confuse x=(x0+n*2pi)i with x0
 (define log-exp-simplify? true)
+
+;;; Allows (x^a)^b => x^(a*b)
+;;;   This is dangerous, because can lose or gain a root, e.g.
+;;;   x = (x^(1/2))^2 \= ((x^2)^1/2)=+-x
+(define exponent-product-simplify? true)
+
+;;; Traditionally sqrt(x) is the positive square root
+;;;   but x^(1/2) is both positive and negative roots.
+;;;   This confuses these, potentiall losing a root.
+(define ^1/2->sqrt? true)
 
 ;;; If x is real then (sqrt (square x)) = (abs x)
 ;;;   This is hard to work with, but we usually want to 
@@ -88,6 +98,16 @@ USA.
   (clear-memoizer-tables)
   (set! log-exp-simplify? doit?))
 
+(define (exponent-product-simplify doit?)
+  (assert (boolean? doit?) "argument must be a boolean.")
+  (clear-memoizer-tables)
+  (set! exponent-product-simplify? doit?))
+
+(define (^1/2->sqrt doit?)
+  (assert (boolean? doit?) "argument must be a boolean.")
+  (clear-memoizer-tables)
+  (set! ^1/2->sqrt? doit?))
+
 (define (sqrt-expt-simplify doit?)
   (assert (boolean? doit?) "argument must be a boolean.")
   (clear-memoizer-tables)
@@ -101,7 +121,7 @@ USA.
 (define (aggressive-atan-simplify doit?)
   (assert (boolean? doit?) "argument must be a boolean.")
   (clear-memoizer-tables)
-  (set! aggressive-atan-simplify doit?))
+  (set! aggressive-atan-simplify? doit?))
 
 (define (inverse-simplify doit?)
   (assert (boolean? doit?) "argument must be a boolean.")
@@ -164,10 +184,16 @@ USA.
   (not (integer? x)))
 
 (define (even-integer? x)
-  (and (integer? x) (even? x) (fix:> x 1)))
+  (and (integer? x) (even? x)))
 
 (define (odd-integer? x)
-  (and (integer? x) (odd? x) (fix:> x 1)))
+  (and (integer? x) (odd? x)))
+
+(define (even-positive-integer? x)
+  (and (even-integer? x) (fix:> x 1)))
+
+(define (odd-positive-integer? x)
+  (and (odd-integer? x) (fix:> x 2)))
 
 (define (universal-reductions exp)
   (let ((vars (variables-in exp)))
@@ -191,7 +217,6 @@ USA.
 
 (define logexp
   (rule-system
-
    ( (exp (* (? n integer?) (log (? x))))
      none
      (expt (: x) (: n)) )
@@ -200,7 +225,7 @@ USA.
    ( (log (exp (? x)))
      (and log-exp-simplify?
 	  (let ((xs (rcf:simplify x)))
-            (assume! `(= (exp (log ,xs)) ,xs) 'logexp1)))
+            (assume! `(= (log (exp ,xs)) ,xs) 'logexp1)))
      (: x) )
 
    ( (sqrt (exp (? x)))
@@ -217,7 +242,6 @@ USA.
 
 (define magsimp
   (rule-system
-
    ( (magnitude (* (? x) (? y) (?? ys)))
      none
      (* (magnitude (: x)) (magnitude (* (: y) (:: ys)))) )
@@ -225,14 +249,6 @@ USA.
    ( (magnitude (expt (? x) (? n even-integer?)))
      none
      (expt (: x) (: n)) )
-
-   ;; where does this nonsense come from?
-   ( ((derivative magnitude) (expt (? x) (? n even-integer?)))
-     (lambda (x)
-       (error "Who ordered this?" x)
-       ignore-zero?)
-     1 )
-
    ))
 
 (define miscsimp  
@@ -242,13 +258,42 @@ USA.
 
    ( (expt (? x) 1) none (: x) )
 
+   ( (expt (expt (? x) (? a)) (? b))
+     (let ((a (rcf:simplify a)) (b (rcf:simplify b)))
+       (or (and (integer? a) (integer? b))
+           (and (even-integer? b)
+                (integer? (rcf:simplify (symb:* a b))))
+           (and exponent-product-simplify?
+                (assume! `(= (expt (expt ,x ,a) ,b)
+                             (expt ,x (symb:* ,a ,b)))
+                         'exponent-product))))
+     (expt (: x) (: (symb:* a b))) )
+
    ( (expt (? x) 1/2)
-     none
+     ^1/2->sqrt?
      (sqrt (: x)) )
 
-   ( (expt (expt (? x) (? p/q)) (? m*q))
-     (integer? (rcf:simplify (symb:* p/q m*q)))
-     (expt (: x) (: (symb:* p/q m*q))) )
+   ( (* (?? fs1)			; a rare, expensive luxury
+	(? x)
+	(?? fs2)
+	(expt (? x) (? y))
+	(?? fs3))
+     none
+     (* (:: fs1)
+	(:: fs2)
+	(expt (: x) (+ 1 (: y)))
+	(:: fs3)) )
+
+   ( (* (?? fs1)			; a rare, expensive luxury
+	(expt (? x) (? y))
+	(?? fs2)
+	(? x)
+	(?? fs3))
+     none
+     (* (:: fs1)
+	(expt (: x) (+ 1 (: y)))
+	(:: fs2)
+	(:: fs3)) )
 
    ( (* (?? fs1)			; a rare, expensive luxury
 	(expt (? x) (? y1))
@@ -257,8 +302,8 @@ USA.
 	(?? fs3))
      none
      (* (:: fs1)
-	(expt (: x) (+ (: y1) (: y2)))
 	(:: fs2)
+	(expt (: x) (+ (: y1) (: y2)))
 	(:: fs3)) )
    ))
 
@@ -274,12 +319,15 @@ USA.
 	  (let ((xs (rcf:simplify x)))
 	     (assume! `(= (sqrt (expt ,xs ,n))
                           (expt ,xs ,(quotient n 2)))
-                      'simsqrt)))
+                      'simsqrt1)))
      (expt (: x) (: (quotient n 2))) )
 
-   ;; Restrict for |n|>2
-   ( (sqrt (expt (? x) (? n odd-integer?)))
-     none
+   ( (sqrt (expt (? x) (? n odd-positive-integer?)))
+     (and sqrt-expt-simplify?
+	  (let ((xs (rcf:simplify x)))
+	     (assume! `(= (sqrt (expt ,xs ,n))
+                          (expt ,xs ,(quotient (fix:- n 1) 2)))
+                      'simsqrt2)))
      (* (sqrt (: x)) (expt (: x) (: (quotient (fix:- n 1) 2)))) )
 
    ( (expt (sqrt (? x)) (? n odd-integer?))
@@ -461,9 +509,9 @@ USA.
      none
      (+ (:: x1) (:: x3) (:: x5) (log (* (: x2) (: x4)))) )
 
-   ( (* (? n integer?) (?? f1) (log (? x)) (?? f2))
+   ( (- (log (? x)) (log (? y)))
      none
-     (* (:: f1) (log (expt (: x) (: n))) (:: f2)) )
+     (log (/ (: x) (: y))) )
 
    ( (+ (?? x1)
 	(* (?? f1) (log (? x)) (?? f2))
@@ -487,10 +535,22 @@ USA.
      none
      (+ (log (: x1)) (log (* (: x2) (:: xs)))) )
 
-   ( (log (expt (? x) (? e))) none (* (: e) (log (: x))) )
+   ( (log (/ (? x1) (? x2)))
+     none
+     (- (log (: x1)) (log (: x2))) )
+
+   ( (log (expt (? x) (? e)))
+     none
+     (* (: e) (log (: x))) )
    ))
 
-
+(define log-extra
+  (rule-system
+   ( (* (? n integer?) (?? f1) (log (? x)) (?? f2))
+     none
+     (* (:: f1) (log (expt (: x) (: n))) (:: f2)) )
+   ))
+
 (define (list< l1 l2)
   (cond ((null? l1) (not (null? l2)))
 	((null? l2) #f)
@@ -498,44 +558,62 @@ USA.
 	((> (car l1) (car l2)) #f)
 	(else (list< (cdr l1) (cdr l2)))))
 
-(define reals?
-  (let ((s (string->symbol "Real")))
-    (lambda (r) (eq? r s))))
-  
 (define canonicalize-partials
   (rule-system
 
-   ( (((partial (?? i))
-       ((partial (?? j))
-	(? f)))
+   ;; First turn nests into products.
+   ( ((partial (?? i)) ((partial (?? j)) (? f)))
+     none
+     ((* (partial (:: i)) (partial (:: j))) (: f)))
+
+   ( ((partial (?? i)) ((* (partial (?? j)) (?? more)) (? f)))
+     none
+     ((* (partial (:: i)) (partial (:: j)) (:: more)) (: f)))
+
+   ;; Exponentiation of operators makes things hairy
+   ( ((expt (partial (?? i)) (? n)) ((partial (?? j)) (? f)))
+     none
+     ((* (expt (partial (:: i)) (: n)) (partial (:: j))) (: f)))
+
+   ( ((partial (?? i)) ((expt (partial (?? j)) (? n)) (? f)))
+     none
+     ((* (partial (:: i)) (expt (partial (:: j)) (: n))) (: f)))
+
+   ( ((expt (partial (?? i)) (? n)) ((expt (partial (?? j)) (? m)) (? f)))
+     none
+     ((* (expt (partial (:: i)) (: n)) (expt (partial (:: j)) (: m))) (: f)))
+
+
+   ;; Already some accumulation
+   ( ((partial (?? i)) ((* (partial (?? j)) (?? more)) (? f)))
+     none
+     ((* (partial (:: i)) (partial (:: j)) (:: more)) (: f)))
+
+   ( ((expt (partial (?? i)) (? n)) ((* (partial (?? j)) (?? more)) (? f)))
+     none
+     ((* (expt (partial (:: i)) (: n)) (partial (:: j)) (:: more)) (: f)))
+
+   ( ((partial (?? i)) ((* (expt (partial (?? j)) (? m)) (?? more)) (? f)))
+     none
+     ((* (partial (:: i)) (expt (partial (:: j)) (: m)) (:: more)) (: f)))
+
+   ( ((expt (partial (?? i)) (? n)) ((* (expt (partial (?? j)) (? m)) (?? more)) (? f)))
+     none
+     ((* (expt (partial (:: i)) (: n)) (expt (partial (:: j)) (: m)) (:: more)) (: f)))
+
+
+   ;; Next sort products, if OK
+   ( (((* (?? xs) (partial (?? i)) (?? ys) (partial (?? j)) (?? zs))
+       (? f symbol?))
       (?? args))
-
-     (and commute-partials?
-	  (symbol? f)
-	  (list< j i)
-	  (symb:elementary-access? i args)
-	  (symb:elementary-access? j args))
-
-     (((partial (:: j))
-       ((partial (:: i))
-	(: f)))
+     (let ((args (expression args)))
+       (and commute-partials?
+	    (symb:elementary-access? i args)
+	    (symb:elementary-access? j args)
+	    (list< j i)))
+     (((* (:: xs) (partial (:: j)) (:: ys) (partial (:: i)) (:: zs))
+       (: f))
       (:: args)) )
-
-   #|
-   ( ((partial (?? i))
-      (literal-function
-       (quote ((partial (?? j))
-	       (literal-function (quote (? f))
-				 (-> (? fsjd) (? fsjr reals?)))))
-       (-> (? fsid) (? fsir reals?))))
-     (and commute-partials? (list< j i))
-     ( (partial (:: j))
-       (literal-function
-	(quote ((partial (:: i))
-		(literal-function (quote (: f))
-				  (-> (: fsid) (: fsir)))))
-	(-> (: fsjd) (: fsjr))) ))
-   |#
    ))
 
 ;;;; trigonometry
@@ -983,6 +1061,19 @@ USA.
      none
      (+ 1 (:: a1) (:: a2) (:: a3)) )
 
+   
+   ( (+ (?? a1)
+	(* (?? f1) (expt (sin (? x)) 2) (?? f2))
+	(?? a2)
+	(* (?? f3) (expt (cos (? x)) 2) (?? f4))
+	(?? a3))
+     (let ((s1 (rcf:simplify `(* ,@f1 ,@f2)))
+	   (s2 (rcf:simplify `(* ,@f3 ,@f4))))
+       (if (exact-zero? (rcf:simplify `(- ,s1 ,s2)))
+	   s1
+	   #f))
+     (+ (:: a1) (:: a2) (:: a3) (: predicate-value)) )
+
 #|;; Sines are before cosines (see note above)
    ( (+ (?? a1)
 	(expt (cos (? x)) 2)
@@ -992,7 +1083,8 @@ USA.
      none
      (+ (:: a1) (:: a2) (:: a3) 1) )
 |#
-   
+
+#|   
    ( (+ (?? a1)
 	(* (expt (sin (? x)) 2) (?? f1))
 	(?? a2)
@@ -1004,6 +1096,7 @@ USA.
 	   s1
 	   #f))
      (+ (:: a1) (:: a2) (:: a3) (: predicate-value)) )
+|#
 
 #|;; Sines are before cosines (see note above)
    ( (+ (?? a1)
@@ -1402,6 +1495,26 @@ USA.
 	    sincos->exp1
 	    trig->sincos)
    exp))
+
+(define clean-differentials
+  (rule-system
+   ( (make-differential-quantity
+      (list (?? lterms)
+	    (make-differential-term (? dx) 0)
+	    (?? rterms)))
+     none
+     (make-differential-quantity
+      (list (:: lterms)
+	    (:: rterms)) ))
+
+   ( (make-differential-quantity
+      (list (make-differential-term '() (? x))))
+     none
+     (: x))
+   
+   ( (make-differential-quantity (list)) none 0 )
+
+   ))
 
 (define (full-simplify exp)
   ((compose rcf:simplify

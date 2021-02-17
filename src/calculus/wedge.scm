@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;; Higher rank forms can be constructed from 1forms by wedging them
 ;;; together.  This antisymmetric tensor product is computed as a
 ;;; determinant.  The purpose of this is to allow us to use the
@@ -34,12 +35,13 @@ USA.
   (let ((n1 (get-rank form1)) (n2 (get-rank form2)))
     (if (or (zero? n1) (zero? n2))
 	(* form1 form2)
-	(let ((n (fix:+ n1 n2)))
+	(let ((n (fix:+ n1 n2))
+              (k (/ 1 (* (factorial n1) (factorial n2)))))
 	  (define (the-wedge . args)
 	    (assert (fix:= (length args) n)
 		    "Wrong number of args to wedge product")
 	    (let ((perms (permutations (iota n))))
-	      (g:* (/ 1 (* (factorial n1) (factorial n2))) ; Error in Singer.
+	      (g:* k                    ; Error in Singer.
 		   (apply g:+
 			  (map (lambda (p)
 				 (let ((pargs (permute p args)))

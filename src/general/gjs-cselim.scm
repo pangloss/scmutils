@@ -1,31 +1,32 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Simple-minded common-subexpression eliminator.  
-;;;         GJS, 9 December 2005
+;;;    GJS: 9 December 2005, 23 December 2019
 
 (declare (usual-integrations))
 
@@ -125,12 +126,22 @@ USA.
 	  (else
 	   `(let ,used-bindings ,body)))))
 
-(define (make-canonical-lets variable-bindings body)
-  (cond ((null? variable-bindings) body)
-	((null? (cdr variable-bindings))
-	 `(let ,variable-bindings ,body))
-	(else
-	 `(let* ,variable-bindings ,body))))
+(define (make-canonical-lets bindings body)
+  (if (null? bindings)
+      body
+      (let-values
+          (((independent dependent)
+            (partition (lambda (binding)
+                         (every (lambda (other-binding)
+                                  (not (occurs-in? (car other-binding)
+                                                   (cadr binding))))
+                                bindings))
+                       bindings)))
+        (if (null? independent)
+            (error "variables interdependent")
+            (let ((inner (make-canonical-lets dependent body)))
+              `(let ,independent
+                 ,inner))))))
  
 (define (make-expression-recorder parent-recorder bound-variables)
   (let ((local-expressions-seen '()))
@@ -173,8 +184,8 @@ USA.
 	 (lambda (variable)
 	   (if (symbol? variable)
 	       (let ((entry
-		      (find-matching-item local-expressions-seen
-			(lambda (entry) (eq? (cadr entry) variable)))))
+		      (find (lambda (entry) (eq? (cadr entry) variable))
+			    local-expressions-seen)))
 		 (if entry
 		     entry
 		     (if parent-recorder
@@ -202,6 +213,7 @@ USA.
 	   (memq expression variables))
 	  (else
 	   (eq? variables expression)))))
+
 #|
 (pp (gjs/cselim '(+ (* x 3) (- x y) (* x 3))))
 (let ((G306 (* x 3)))
@@ -233,7 +245,7 @@ USA.
        (/ (* 1/3 GM (expt dt 3) p_phi_0) (* (expt m 2) (expt r_0 5)))
        (/ (* -1/3 (expt dt 3) (expt p_phi_0 3)) (* (expt m 3) (expt r_0 6)))))
   (fringe-smaller-than? 7)))
-(let* ((G44125 (expt dt 3)) (G44128 (* (expt m 3) (expt r_0 4))))
+(let ((G44125 (expt dt 3)) (G44128 (* (expt m 3) (expt r_0 4))))
   (up
    (+ (/ (* 1/3 GM (expt dt 3) p_r_0) (* (expt m 2) (expt r_0 3)))
       (/ (* -1/2 G44125 (expt p_phi_0 2) p_r_0) G44128))

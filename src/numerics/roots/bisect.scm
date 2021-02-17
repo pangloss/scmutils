@@ -1,34 +1,80 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Root finding by successive bisection
 
 (declare (usual-integrations))
 
-;;; Simple bisection search
+;;; Simple bisection search 
+;;;   In IEEE 754 binary floating point I think this will always
+;;;   converge to full precision, but I have not proved it.  GJS
+
+(define (bisect-1 f x0 x1)
+  (let ((fx0 (f x0)) (fx1 (f x1)))
+    (if (> (* fx0 fx1) 0.0)
+      (error "root not bounded" x0 xm x1 fx0 fx1))
+    (let loop ((x0 x0) (fx0 fx0) (x1 x1) (fx1 fx1))
+      (cond ((= fx0 0.0) x0)
+	    ((= fx1 0.0) x1)
+	    (else
+	     (let ((xm (/ (+ x0 x1) 2.0)))
+	       (cond ((= x0 xm) x0)
+		     ((= x1 xm) x1)
+		     (else
+		      (let ((fxm (f xm)))
+			(if (< (* fx1 fxm) 0.0)
+			    (loop xm fxm x1 fx1)
+			    (loop x0 fx0 xm fxm)))))))))))
+#|
+;;; for example, this took 51 evaluations of f.
+
+(define (kepler ecc m)
+  (bisect-1
+   (lambda (e)
+     (write-line e)
+     (- e (* ecc (sin e)) m))
+   0.0
+   2pi))
+
+(kepler .99 .01)
+6.283185307179586
+0.
+3.141592653589793
+1.5707963267948966
+...
+.34227031649176376
+.3422703164917861
+.3422703164917749
+#| .3422703164917749 |#
+
+|#
+
+;;; Simple bisection search 
+;;;  terminating when x0 close to x1.
 
 (define (bisect-2 f x0 x1 eps)
   (let loop ((x0 x0) (fx0 (f x0)) (x1 x1) (fx1 (f x1)))
@@ -126,6 +172,8 @@ USA.
 
 (define *bisect-wallp* #f)
 
+(define *bisect-error?* #f)
+
 (define (bisect f x0 x1 eps #!optional n-break)
   (let ((n-break (if (default-object? n-break) *bisect-break* n-break)))
     (let loop ((x0 x0) (fx0 (f x0)) (x1 x1) (fx1 (f x1)) (iter 0))
@@ -135,7 +183,9 @@ USA.
 	  (if (= fx1 0.0)
 	      x1
 	      (if (> (* fx1 fx0) 0.0)
-		  (error "root not bounded")
+                  (if *bisect-error?*
+                      (error "root not bounded")
+                      #f)
 		  (let ((xm (if (< iter n-break) 
 				(/ (+ x0 x1) 2.)
 				(/ (- (* fx1 x0) (* fx0 x1)) (- fx1 fx0)))))

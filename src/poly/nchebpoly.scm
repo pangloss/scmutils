@@ -1,38 +1,46 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Chebyshev polynomial routines
 
 (declare (usual-integrations))
 
-;;;  Must be loaded into an environment where polynomial manipulations exist.
+;;;  Must be loaded into an environment where polynomial manipulations
+;;;  exist.
+
 ;;; Edited by GJS 10Jan09
-;;; 1/24/90 (gjs) converted to flush dependencies on dense list representation.
+
+;;; 1/24/90 (gjs) converted to flush dependencies on dense list
+;;; representation.
+
 ;;; 9/22/89 (gjs) reduce->a-reduce
-;;; 12/23/87 (mh) modified CHEB-ECON to return original poly if not trimmed
+
+;;; 12/23/87 (mh) modified CHEB-ECON to return original poly if not
+;;; trimmed
 
 (define (add-lists l1 l2)
   (cond ((null? l1) l2)
@@ -43,8 +51,7 @@ USA.
 
 (define (scale-list s l)
   (map (lambda (x) (* s x)) l))
-
-
+
 ;;; We define the stream of Chebyshev polynomials,
 ;;;  using the recurrence relation
 ;;;           T[0] = 1, T[1] = x, T[n] = 2xT[n-1] - T[n-2]
@@ -147,9 +154,10 @@ USA.
               (loop (+ sum (abs (cadr r))) (cdr r)))))))
 
 
-;;; The next procedure performs Chebyshev economization on a polynomial p
-;;;  over a specified interval [a,b]: the returned polynomial is guaranteed
-;;;  to differ from the original by no more than eps over [a, b].
+;;; The next procedure performs Chebyshev economization on a
+;;;  polynomial p over a specified interval [a,b]: the returned
+;;;  polynomial is guaranteed to differ from the original by no more
+;;;  than eps over [a, b].
 
 (define (cheb-econ p a b eps)
   (let ((q (poly-domain->canonical p a b)))
@@ -175,9 +183,9 @@ USA.
               (loop (fix:+ i 1))))))
 
 ;;; This procedure accepts an integer n > 0 and a real x, and returns
-;;;  a list of the values T[0](x) ... T[n-1](x). If an optional third
-;;;  argument is given as the symbol 'HALF, then the first value in the
-;;;  list will have the value 0.5; otherwise it has the value 1.
+;;; a list of the values T[0](x) ... T[n-1](x). If an optional third
+;;; argument is given as the symbol 'HALF, then the first value in the
+;;; list will have the value 0.5; otherwise it has the value 1.
 
 (define (first-n-cheb-values n x . optionals)
   (let ((first (if (and (not (null? optionals))
@@ -210,8 +218,9 @@ USA.
 ;;;  for a function f specified on an interval [a,b]. The interval is
 ;;;  mapped onto [-1,1] and the function approximated is g, defined on
 ;;;  [-1,1] to behave the same as f on [a,b].
-;;; Note: the returned list of coefficients is N long, and is associated
-;;;  with Chebyshev polynomials from T[0] to T[N-1].
+
+;;; Note: the returned list of coefficients is N long, and is
+;;; associated with Chebyshev polynomials from T[0] to T[N-1].
 
 (define (generate-cheb-exp f a b n)
   (if (<= b a)
@@ -234,15 +243,15 @@ USA.
                       (loop (cons term coeffs) (fix:+ i 1))))))))))))
 
 
-;;; This procedure accepts a function f, an interval [a,b], a number
-;;;  N of points at which to base a Chebyshev interpolation, and an
-;;;  optional precision EPS. The method is to map f onto the canonical
-;;;  interval [-1,1], generate the Chebyshev expansion based on the
-;;;  first N Chebyshev polynomials interpolating at the roots of the
-;;;  N+1st Chebyshev polynomial T[N]. If EPS has been specified, an
-;;;  economization is performed at this point; otherwise not. Finally,
-;;;  the Chebyshev expansion is reconverted to a polynomial and mapped
-;;;  back onto the original interval [a,b].
+;;; This procedure accepts a function f, an interval [a,b], a number N
+;;; of points at which to base a Chebyshev interpolation, and an
+;;; optional precision EPS. The method is to map f onto the canonical
+;;; interval [-1,1], generate the Chebyshev expansion based on the
+;;; first N Chebyshev polynomials interpolating at the roots of the
+;;; N+1st Chebyshev polynomial T[N]. If EPS has been specified, an
+;;; economization is performed at this point; otherwise not. Finally,
+;;; the Chebyshev expansion is reconverted to a polynomial and mapped
+;;; back onto the original interval [a,b].
 
 (define (generate-approx-poly f a b n . optionals)
   (let ((eps (if (null? optionals) false (car optionals))))

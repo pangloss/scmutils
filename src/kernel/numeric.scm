@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Extensions to Scheme numbers
 
 (declare (usual-integrations))
@@ -74,11 +75,42 @@ USA.
 (define :+2pi 2pi)
 (define :-2pi -2pi)
 
+
+;;; *machine-epsilon* is the smallest number that when added to 1.0
+;;;  gives a different number.
+
 (define *machine-epsilon*
   (let loop ((e 1.0))
      (if (= 1.0 (+ e 1.0))
          (* 2 e)
          (loop (/ e 2)))))
+
+;;; In 64-bit IEEE-754 floating point 
+;;; *machine-epsilon* = 2.220446049250313e-16 = 2^(-52)
+
+
+;;; (ulp x) is the distance to the next represented floating-point
+;;;  number after x.
+
+(define (ulp x)
+ (let ((x (abs (exact->inexact x))))
+   (- (* x (+ 1 *machine-epsilon*)) x)))
+
+;;; (ulp 1.0) = *machine-epsilon*
+;;; (ulp 2.0) = 2*(ulp 1.0)
+;;; (ulp 3.0) = 4*(ulp 1.0)
+;;; (ulp 4.0) = 4*(ulp 1.0)
+;;; (ulp 5.0) = 4*(ulp 1.0)
+;;; (ulp 6.0) = 8*(ulp 1.0)
+
+;;; (ulpr x) is an alternate measure.
+
+(define (ulpr x)
+  (let ((x (exact->inexact x)))
+    (abs (/ (* x *machine-epsilon*) 2))))
+
+;;; (ulpr 1.0) = *machine-epsilon*/2
+
 
 (define *sqrt-machine-epsilon* 
   (sqrt *machine-epsilon*))
@@ -128,18 +160,18 @@ USA.
 
 
 (define (principal-value-minus-pi-to-pi x)
-  (if (or (<= x -pi) (> x +pi))
-      (let ((y (- x (* +2pi (floor (/ x 2pi))))))
-	(if (< y +pi) 
+  (if (or (<= x :-pi) (> x :+pi))
+      (let ((y (- x (* :+2pi (floor (/ x :+2pi))))))
+	(if (< y :+pi) 
 	    y
-	    (- y +2pi)))
+	    (- y :+2pi)))
       x))
-
 
 (define (principal-value-zero-to-2pi x)
-  (if (or (< x 0.0) (>= x +2pi))
-      (- x (* +2pi (floor (/ x +2pi))))
+  (if (or (< x 0.0) (>= x :+2pi))
+      (- x (* :+2pi (floor (/ x :+2pi))))
       x))
+
 
 (define ((principal-range period) index)
   (let ((t (- index (* period (floor (/ index period))))))
@@ -262,6 +294,18 @@ USA.
 (stirling-second-kind 5 3)
 ;Value: 25
 |#
+
+;;; Zero testing is hard, because of floating-point roundoff.
+
+(define (~0? x #!optional slack)
+  (if (exact? x)
+      (= x 0)
+      (<= (magnitude x)
+          (* (if (default-object? slack)
+                 100
+                 slack)
+             *machine-epsilon*))))
+
 
 (define (close-enuf? h1 h2 tolerance)
   (<= (magnitude (- h1 h2))

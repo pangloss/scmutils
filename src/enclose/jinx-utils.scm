@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;; -*- Scheme -*-
 
 (declare (usual-integrations))
@@ -347,7 +348,7 @@ USA.
   (newline)
   (write-string string)
   (for-each (lambda (value)
-	      (write-char #\Space)
+	      (write-char #\space)
 	      (if (message/noise? value)
 		  (write-string (cdr value))
 		  (write value)))
@@ -373,7 +374,7 @@ USA.
 		    initial-tab-position
 		    (+ (1+ initial-tab-position)
 		       (string-length (symbol->string (car all-l))))))
-	       (prefix (make-string (1+ tab-position) #\Space)))
+	       (prefix (make-string (1+ tab-position) #\space)))
 
 	  (define-integrable (write-string string)
 	    (write-list/write-string port string))
@@ -385,7 +386,7 @@ USA.
 	    (write-list/write-char port #\newline))
 
 	  (newline)
-	  (write-string (make-string initial-tab-position #\Space))
+	  (write-string (make-string initial-tab-position #\space))
 	  (write-char #\()
 	  (let loop ((l all-l)
 		     (start? true)
@@ -404,7 +405,7 @@ USA.
 					false
 					(- left (-1+ new-size))))
 				(begin
-				  (write-char #\Space)
+				  (write-char #\space)
 				  (write-string next)
 				  (loop (cdr l)
 					false
@@ -442,7 +443,7 @@ USA.
 	     show-false?)))
     (unparse-string state "#[")
     (unparse-string state (car description))
-    (unparse-char state #\Space)
+    (unparse-char state #\space)
     (unparse-object state (object-hash node))
     (if (not (zero? *structure-unparse-level*))
 	(fluid-let ((*structure-unparse-level*
@@ -452,7 +453,7 @@ USA.
 	     (let ((value ((cadr field) node)))
 	       (and (or show-false? value)
 		    (begin
-		      (unparse-char state #\Space)
+		      (unparse-char state #\space)
 		      (unparse-string state (car field))
 		      (unparse-string state ": ")
 		      (unparse-object state value)))))

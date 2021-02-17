@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; State advancer for parametric system derivatives with
 ;;;    arbitrarily-structured states.
 
@@ -126,9 +127,9 @@ USA.
       (lambda (a)
 	(lambda (s)
 	  (up 1 (up (* a (ref s 1 0)) (/ (ref s 1 1) a)))))
-      2)
+      2.0)
      (up -1 (up 1 1))
-     1
+     1.0
      1.e-12
      list))
 ((up 0. (up 7.389056098930656 1.6487212707001282)) 1 .8999999999999999)
@@ -229,26 +230,26 @@ USA.
     (define (advance-state state dt eps continue)
       ;; Continue = (lambda (new-state dt-obtained dt-suggested) ...)
       (let* ((fstate (flatten state))
-	     (parametric-flat-sysder
-	      (make-parametric-flat-sysder parametric-sysder
-	        (lambda (params)
-		  (lambda (fstate)
-		    (flatten ((apply parametric-sysder params)
-			      (unflatten state fstate)))))
-		params
-		fstate)))
+	     (n (vector-length fstate)))
 	((or stepper
-	     (begin (set! stepper
-			  (ode-advancer (parametric-flat-sysder params)
-					eps
-					(vector-length fstate)))
-		    stepper))
+	     (let ((parametric-flat-sysder
+                    (make-parametric-flat-sysder parametric-sysder
+                      (lambda (params)
+                        (lambda (fstate)
+                          (flatten ((apply parametric-sysder params)
+                                    (unflatten state fstate)))))
+                                                 params
+                                                 fstate)))
+               (set! stepper
+                     (ode-advancer (parametric-flat-sysder params)
+                                   eps
+                                   n))
+               stepper))
 	 fstate
 	 dt
 	 (lambda (new-fstate dt-obtained dt-suggested)
 	   (continue (unflatten state new-fstate) dt-obtained dt-suggested)))))
     advance-state))
-
 
 (define (make-parametric-flat-sysder
 	 parametric-sysder parametric-flat-sysder params fstate)
@@ -298,6 +299,10 @@ USA.
 (define *compiled-sysder-table-size* 0)
 (define *compiled-sysder-table* '())
 
+;;; For debugging, set *memoizing-sysder* to #f 
+;;; so code will be recompiled.
+(define *memoizing-sysder* #t)
+
 (define compile-parametric-memoized
   (let ((sm1 (fix:- *max-compiled-sysder-table-size* 1)))
     (define (run parametric-sysder parametric-flat-sysder params fstate)
@@ -305,7 +310,7 @@ USA.
 	     (n-state (vector-length fstate))
 	     (x (list n-params n-state parametric-sysder))
 	     (seen (assoc x *compiled-sysder-table*)))
-	(if seen
+	(if (and *memoizing-sysder* seen)
 	    (cadr seen)
 	    (let ((ans (compile-parametric n-params n-state parametric-flat-sysder)))
 	      (cond ((fix:= *compiled-sysder-table-size*
@@ -330,22 +335,17 @@ USA.
 ;;; instead of the parameters spread out as in the source.
 
 (define *compiler-simplifier*)
-
 ;;; If no "simplification" is desired 
 ;;;(set! *compiler-simplifier* expression)
-
 ;;; Default is to use usual simplifier
 (set! *compiler-simplifier* simplify)
 
+;;; For debugging
+(define *last-expression-to-compiler)
+(define *last-compiled-result)
+
 (define (compile-parametric n-params n-state-vars procedure #!optional simplifier compiler)
   (let ((parameter-arity (procedure-arity procedure)))
-#|
-    (if (not (and (number? (cdr parameter-arity))
-		  (fix:= (car parameter-arity) (cdr parameter-arity))))
-	(error "Indeterminate parameters in parametric procedure"))
-    (if (not (fix:= n-params (car parameter-arity)))
-	(error "Wrong number of parameters to parametric procedure"))
-|#
     (if (default-object? simplifier) (set! simplifier *compiler-simplifier*))
     (if (default-object? compiler) (set! compiler lambda->numerical-procedure))
     (let ((param-names
@@ -375,14 +375,17 @@ USA.
 		  (let (,@(map (lambda (pn j)
 				 `(,pn (list-ref ,params ,j)))
 			       param-names
-			       (generate-list n-params (lambda (j) j))))
+			       (iota n-params)))
 		    (lambda (,state)
 		      (let (,@(map (lambda (xi i)
 				     `(,xi (vector-ref ,state ,i)))
 				   state-var-names
-				   (generate-list n-state-vars (lambda (i) i))))
+				   (iota n-state-vars)))
 			,sderiv-exp))))))
-	  (compiler lexp))))))
+          (set! *last-expression-to-compiler lexp)
+	  (let ((clexp (compiler lexp)))
+            (set! *last-compiled-result clexp)
+            clexp))))))
 
 (define (flush-column exp)
   (if (eq? (car exp) up-constructor-name)

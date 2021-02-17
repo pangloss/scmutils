@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;            Calculus of Infinitesimals
 
 (declare (usual-integrations))
@@ -49,7 +50,8 @@ USA.
 ;;; of these to do the job.  See the procedure diff:derivative near
 ;;; the bottom to understand how derivatives are computed given this
 ;;; differential algebra.  This idea was discovered by Dan Zuras and
-;;; Gerald Jay Sussman in 1992.
+;;; Gerald Jay Sussman in 1992.  DZ and GJS made the first version of
+;;; this code during an all nighter in 1992.
 
 ;;; To expand this idea to work for multiple derivatives of functions
 ;;; of several variables we define an algebra in "infinitesimal
@@ -57,6 +59,11 @@ USA.
 ;;; incremental has exponent greater than 1.  This was worked out in
 ;;; detail by Hal Abelson around 1994, and painfully redone in 1997 by
 ;;; Sussman with the help of Hardy Mayer and Jack Wisdom.
+
+;;; A rare and surprising bug was discovered by Alexey Radul in 2011.
+;;; This was fixed by remapping the infinitesimals for derivatives of
+;;; functions that returned functions.  This was done kludgerously,
+;;; but it works.
 
 ;;;                Data Structure
 ;;; A differential quantity is a typed list of differential terms,
@@ -71,13 +78,13 @@ USA.
   (assert (differential? diff))
   (cdr diff))
 
-
-
 (define (differential->terms diff)
-  (if (differential? diff)
-      (differential-term-list diff)
-      (list
-       (make-differential-term '() diff))))
+  (cond ((differential? diff)
+	 (filter (lambda (term)
+		   (not (g:zero? (differential-coefficient term))))
+		 (differential-term-list diff)))
+	((g:zero? diff) '())
+	(else (list (make-differential-term '() diff)))))
 
 (define (terms->differential terms)
   (cond ((null? terms) :zero)
@@ -103,6 +110,11 @@ USA.
 (define (differential-coefficient dterm)
   (cadr dterm))
 
+(define (terms->differential-collapse terms)
+  (terms->differential
+   (reduce dtl:+ '() (map list terms))))
+
+
 (define (differential-of x)
   (let lp ((x x))
     (if (differential? x)
@@ -121,9 +133,67 @@ USA.
   (terms->differential
    (map (lambda (dterm)
 	  (make-differential-term (differential-tags dterm)
-				  (g:apply (differential-coefficient dterm)
-					   args)))
+            (g:apply (differential-coefficient dterm)
+                     args)))
 	(differential->terms diff))))
+
+
+;;; Here we have the primitive addition and multiplication that
+;;; everything else is built on.
+
+(define (d:+ u v)
+  (terms->differential
+   (dtl:+ (differential->terms u)
+	  (differential->terms v))))
+
+(define (d:* u v)
+  (terms->differential
+   (dtl:* (differential->terms u)
+	  (differential->terms v))))
+
+;;; Differential term lists represent a kind of power series, so they
+;;; can be added and multiplied.  It is important to note that when
+;;; terms are multiplied, no contribution is made if the terms being
+;;; multiplied have a differential tag in common.  Thus dx^2 = zero.
+
+(define (dtl:+ xlist ylist)
+  (cond ((null? xlist) ylist)
+	((null? ylist) xlist)
+	((same-differential-tags? (car xlist) (car ylist))
+	 (let ((ncoeff
+		(g:+ (differential-coefficient (car xlist))
+		     (differential-coefficient (car ylist)))))
+	   (if (g:zero? ncoeff)         ;(exact-zero? ncoeff)
+	       (dtl:+ (cdr xlist) (cdr ylist))
+	       (cons (make-differential-term
+		      (differential-tags (car xlist))
+		      ncoeff)
+		     (dtl:+ (cdr xlist) (cdr ylist))))))
+	((<differential-tags? (car xlist) (car ylist))
+	 (cons (car xlist) (dtl:+ (cdr xlist) ylist)))
+	(else
+	 (cons (car ylist) (dtl:+ xlist (cdr ylist))))))
+
+(define (dtl:* xlist ylist)
+  (if (null? xlist)
+      '()
+      (dtl:+ (tdtl:* (car xlist) ylist)
+	     (dtl:* (cdr xlist) ylist))))
+
+(define (tdtl:* term terms)
+  (let ((tags (differential-tags term))
+	(coeff (differential-coefficient term)))
+    (let lp ((terms terms))
+      (if (null? terms)
+	  '()
+	  (let ((tags1 (differential-tags (car terms))))
+	    (if (null? (intersect-differential-tags tags tags1))
+		(cons (make-differential-term
+		       (union-differential-tags tags tags1)
+		       (g:* coeff
+			    (differential-coefficient (car terms))))
+		      (lp (cdr terms)))
+		(lp (cdr terms))))))))
 
 ;;; Differential tags lists are ordinary lists of positive integers,
 ;;; so we can use Scheme list-manipulation procedures on them.
@@ -200,63 +270,6 @@ USA.
 	 (intersect-differential-tags set1
 				      (cdr set2)))))
 
-;;; Differential term lists represent a kind of power series, so they
-;;; can be added and multiplied.  It is important to note that when
-;;; terms are multiplied, no contribution is made if the terms being
-;;; multiplied have a differential tag in common.  Thus dx^2 = zero.
-
-(define (dtl:+ xlist ylist)
-  (cond ((null? xlist) ylist)
-	((null? ylist) xlist)
-	((same-differential-tags? (car xlist) (car ylist))
-	 (let ((ncoeff
-		(g:+ (differential-coefficient (car xlist))
-		     (differential-coefficient (car ylist)))))
-	   (if (g:zero? ncoeff)                 ;;(exact-zero? ncoeff)
-	       (dtl:+ (cdr xlist) (cdr ylist))
-	       (cons (make-differential-term
-		      (differential-tags (car xlist))
-		      ncoeff)
-		     (dtl:+ (cdr xlist) (cdr ylist))))))
-	((<differential-tags? (car xlist) (car ylist))
-	 (cons (car xlist) (dtl:+ (cdr xlist) ylist)))
-	(else
-	 (cons (car ylist) (dtl:+ xlist (cdr ylist))))))
-
-(define (dtl:* xlist ylist)
-  (if (null? xlist)
-      '()
-      (dtl:+ (tdtl:* (car xlist) ylist)
-	     (dtl:* (cdr xlist) ylist))))
-
-(define (tdtl:* term terms)
-  (let ((tags (differential-tags term))
-	(coeff (differential-coefficient term)))
-    (let lp ((terms terms))
-      (if (null? terms)
-	  '()
-	  (let ((tags1 (differential-tags (car terms))))
-	    (if (null? (intersect-differential-tags tags tags1))
-		(cons (make-differential-term
-		       (union-differential-tags tags tags1)
-		       (g:* coeff
-			    (differential-coefficient (car terms))))
-		      (lp (cdr terms)))
-		(lp (cdr terms))))))))
-
-;;; Here we have the primitive addition and multiplication that
-;;; everything else is built on.
-
-(define (d:+ u v)
-  (terms->differential
-   (dtl:+ (differential->terms u)
-	  (differential->terms v))))
-
-(define (d:* u v)
-  (terms->differential
-   (dtl:* (differential->terms u)
-	  (differential->terms v))))
-
 ;;; To turn a unary function into one that operates on differentials
 ;;; we must supply the derivative.  This is the essential chain rule.
 
@@ -290,7 +303,8 @@ USA.
   (if (differential? x)
       (let ((dts (differential->terms x)))
 	(let ((keytag
-	       (car (last-pair (differential-tags (car (last-pair dts)))))))
+	       (car (last-pair
+                     (differential-tags (car (last-pair dts)))))))
 	  (terms->differential-collapse
 	   (filter (lambda (term)
 		     (not (memv keytag (differential-tags term))))
@@ -301,17 +315,13 @@ USA.
   (if (differential? x)
       (let ((dts (differential->terms x)))
 	(let ((keytag
-	       (car (last-pair (differential-tags (car (last-pair dts)))))))
+	       (car (last-pair
+                     (differential-tags (car (last-pair dts)))))))
 	  (terms->differential-collapse
 	   (filter (lambda (term)
 		     (memv keytag (differential-tags term)))
 		   dts))))
       :zero))
-
-(define (terms->differential-collapse terms)
-  (terms->differential
-   (reduce dtl:+ '() (map list terms))))
-
 
 ;;; To turn a binary function into one that operates on differentials
 ;;;  we must supply the partial derivatives with respect to each
@@ -360,12 +370,17 @@ USA.
 ;;; the differential tag, we do this as follows:
 
 (define (max-order-tag . args)
-  (car (last-pair
-	(a-reduce union-differential-tags
-		  (map (lambda (arg)
-			 (differential-tags
-			  (car (last-pair (differential->terms arg)))))
-		       args)))))
+  (let ((u (a-reduce union-differential-tags
+		     (map (lambda (arg)
+			    (let ((terms (differential->terms arg)))
+			      (if (null? terms)
+				  '()
+				  (differential-tags
+                                   (car (last-pair terms))))))
+			  args))))
+    (if (null? u)
+	'()
+	(car (last-pair u)))))
 
 (define (without-tag x keytag)
   (if (differential? x)
@@ -455,23 +470,24 @@ USA.
 
 (define diff:power
   (diff:binary-op g:expt
-		  (lambda (x y)
-		    (g:* y (g:expt x (g:- y 1))))
-		  (lambda (x y)
-		    (error "Should not get here: DIFF:POWER" x y))))
+    (lambda (x y)
+      (g:* y (g:expt x (g:- y 1))))
+    (lambda (x y)
+      (error "Should not get here: DIFF:POWER" x y))))
 
 (define diff:expt
   (diff:binary-op g:expt
-		  (lambda (x y)
-		    (g:* y (g:expt x (g:- y 1))))
-		  (lambda (x y)
-		    (if (and (number? x) (zero? x))
-			(if (number? y)
-			    (if (positive? y)
-				:zero
-				(error "Derivative undefined: EXPT" x y))
-			    :zero) ;But what if y is negative later?
-			(g:* (g:log x) (g:expt x y))))))
+    (lambda (x y)
+      (g:* y (g:expt x (g:- y 1))))
+    (lambda (x y)
+      (if (and (number? x) (zero? x))
+          (if (number? y)
+              (if (positive? y)
+                  :zero
+                  (error "Derivative undefined: EXPT"
+                         x y))
+              :zero)     ;But what if y is negative later?
+          (g:* (g:log x) (g:expt x y))))))
 
 
 (define diff:exp
@@ -541,59 +557,6 @@ USA.
 	    (error "Derivative of ABS at" x)))
      x)))
 
-;;; Funny functions -- needs singularity distributions?
-;;; known-real? means provably real.  e.g. a polynomial in *known-reals*
-
-(define (diff:conjugate z)
-  #| ;; This cannot really work.
-  (terms->differential
-   (map (lambda (term)
-	  (make-differential-term (differential-tags term)
-				  (g:conjugate (differential-coefficient term))))
-	(differential->terms z)))
-  |#
-  (if (not (known-real? (finite-part z)))
-      (error "Not real -- DIFF:CONJUGATE" z))
-  ((diff:unary-op (lambda (x) x) (lambda (x) 1)) z))
-
-
-(define (diff:real-part z)
-  (if (not (known-real? (finite-part z)))
-      (error "Not real -- DIFF:REAL-PART" z))
-  ((diff:unary-op (lambda (x) x) (lambda (x) 1)) z))
-
-(define (diff:imag-part z)
-  (if (not (known-real? (finite-part z)))
-      (error "Not real -- DIFF:IMAG-PART" z))
-  ((diff:unary-op (lambda (x) 0) (lambda (x) 0)) z))
-
-(define (diff:magnitude z)
-  #|
-  (if (not (known-real? (finite-part z)))
-      (error "Not real -- DIFF:MAGNITUDE" z))
-  ;; Could be z or -z
-  (error "Unimplemented -- DIFF:MAGNITUDE" z)
-  |#
-  (diff:abs z))
-
-(define (diff:angle z)
-  #|
-  (if (not (known-real? (finite-part z)))
-      (error "Not real -- DIFF:ANGLE" z))
-  ;; Could be 1 or -1
-  (error "Unimplemented -- DIFF:ANGLE" z)
-  |#
-  (let ((f (finite-part z)))
-    ((cond ((g:< f 0)
-	    (diff:unary-op (lambda (x) x) (lambda (x) :zero)))
-	   ((g:= f 0)
-	    (error "Derivative of ABS undefined at zero"))
-	   ((g:> f 0)
-	    (diff:unary-op (lambda (x) x) (lambda (x) :zero)))
-	   (else
-	    (error "Derivative of ABS at" z)))
-     z)))
-
 (define (diff:type x) differential-type-tag)
 (define (diff:type-predicate x) differential?)
 
@@ -628,36 +591,48 @@ USA.
 (assign-operation 'sinh            diff:sinh             differential?)
 (assign-operation 'cosh            diff:cosh             differential?)
 
-(assign-operation '+               diff:+                differential? not-compound?)
-(assign-operation '+               diff:+                not-compound? differential?)
-(assign-operation '-               diff:-                differential? not-compound?)
-(assign-operation '-               diff:-                not-compound? differential?)
-(assign-operation '*               diff:*                differential? not-compound?)
-(assign-operation '*               diff:*                not-compound? differential?)
-(assign-operation '/               diff:/                differential? not-compound?)
-(assign-operation '/               diff:/                not-compound? differential?)
-
-(assign-operation 'dot-product     diff:*                differential? not-compound?)
-
-(assign-operation 'expt     diff:power  differential? (negation differential?))
-(assign-operation 'expt     diff:expt   not-compound?          differential?)
-
-(assign-operation 'atan2           diff:atan2            differential? not-compound?)
-(assign-operation 'atan2           diff:atan2            not-compound? differential?)
+(assign-operation '+               diff:+       differential? not-compound?)
+(assign-operation '+               diff:+       not-compound? differential?)
+(assign-operation '-               diff:-       differential? not-compound?)
+(assign-operation '-               diff:-       not-compound? differential?)
+(assign-operation '*               diff:*       differential? not-compound?)
+(assign-operation '*               diff:*       not-compound? differential?)
+(assign-operation '/               diff:/       differential? not-compound?)
+(assign-operation '/               diff:/       not-compound? differential?)
 
-(assign-operation 'abs             diff:abs              differential?)
+(assign-operation 'solve-linear-right     diff:/
+                  differential? not-compound?)
+(assign-operation 'solve-linear-right     diff:/
+                  not-compound? differential?)
 
-;;; The following are not completely thought out!  Needs more work.
+(assign-operation 'solve-linear-left      (lambda (x y) (diff:/ y x))
+                  not-compound? differential?)
+(assign-operation 'solve-linear-left      (lambda (x y) (diff:/ y x))
+                  differential? not-compound?)
 
-(assign-operation 'conjugate       diff:conjugate        differential?)
-(assign-operation 'real-part       diff:real-part        differential?)
-(assign-operation 'imag-part       diff:imag-part        differential?)
-(assign-operation 'magnitude       diff:magnitude        differential?)
-(assign-operation 'angle           diff:angle            differential?)
+(assign-operation 'solve-linear           (lambda (x y) (diff:/ y x))
+                  not-compound? differential?)
+(assign-operation 'solve-linear           (lambda (x y) (diff:/ y x))
+                  differential? not-compound?)
+
+(assign-operation 'dot-product     diff:*
+                  differential? not-compound?)
+
+(assign-operation 'expt     diff:power
+                  differential? (negation differential?))
+(assign-operation 'expt
+                  diff:expt   not-compound?  differential?)
+
+(assign-operation 'atan2           diff:atan2
+                  differential? not-compound?)
+(assign-operation 'atan2           diff:atan2
+                  not-compound? differential?)
+
+(assign-operation 'abs             diff:abs
+                  differential?)
 
 ;;; This stuff allows derivatives to work in code where there are
 ;;; conditionals if the finite parts are numerical.
-
 
 (define (diff:zero? x)
   (assert (differential? x))
@@ -803,11 +778,12 @@ USA.
 (define f-hat ((D f) 3))
 #| f-hat |#
 
-(((f-hat exp) 5)
+((f-hat exp) 5)
 #| 2980.9579870417283 |#
 
 ((f-hat (f-hat exp)) 5)
 #| 0 |#			;WRONG!
+#| 59874.14171519782 |# ;Now correct.
 |#
 
 #|
@@ -830,6 +806,134 @@ USA.
 ;;; where I use "extract-dx-part".
 |#
 
+(define (extract-dx-part dx obj)
+  (define (dist obj)
+    (cond ((structure? obj)
+	   (s:map/r dist obj))
+	  ((matrix? obj)
+	   ((m:elementwise dist) obj))
+	  ((quaternion? obj)
+	   (quaternion
+	    (dist (quaternion-ref obj 0))
+	    (dist (quaternion-ref obj 1))
+	    (dist (quaternion-ref obj 2))
+	    (dist (quaternion-ref obj 3))))
+	  ((function? obj)
+           (extract-dx-function dx obj))
+	  ((operator? obj)
+           (extract-dx-operator dx obj))
+	  ((series? obj)
+	   (make-series (g:arity obj)
+			(map-stream dist (series->stream obj))))
+	  (else (extract-dx-differential dx obj))))
+  (dist obj))
+
+(define (extract-dx-differential dx obj)
+  (if (differential? obj)
+      (terms->differential-collapse
+       (append-map
+        (lambda (term)
+          (let ((tags (differential-tags term)))
+            (if (memv dx tags)
+                (list
+                 (make-differential-term (delv dx tags)
+                                         (differential-coefficient term)))
+                '())))
+        (differential-term-list obj)))
+      :zero))
+
+(define (extract-dx-function dx procedure)
+  (lambda args
+    (let ((internal-tag (make-differential-tag)))
+      ((replace-differential-tag internal-tag dx)
+       (extract-dx-part dx
+         (apply procedure
+                (map (replace-differential-tag dx internal-tag)
+                     args)))))))
+
+(define (extract-dx-operator dx obj)
+  (extract-dx-function dx procedure))
+
+
+#|
+(define (extract-dx-operator dx obj)
+  (hide-tag-in-procedure dx
+                         (g:* (make-operator dist 'extract (operator-subtype obj))
+                              obj)))
+(define (hide-tag-in-procedure dx procedure)
+  (lambda args
+    (let ((internal-tag (make-differential-tag)))
+      ((replace-differential-tag internal-tag dx)
+       (let* ((rargs
+	       (map (replace-differential-tag dx internal-tag)
+		    args))
+	      (val (apply procedure rargs)))
+	 val)))))
+|#
+
+(define ((replace-differential-tag oldtag newtag) object)
+  (cond ((differential? object)
+	 (terms->differential
+	  (map (lambda (term)
+		 (if (memv oldtag (differential-tags term))
+		     (make-differential-term
+		      (insert-differential-tag newtag
+                       (remove-differential-tag oldtag
+                        (differential-tags term)))
+		      (differential-coefficient term))
+		     term))
+	       (differential-term-list object))))
+	((structure? object)
+	 (s:map/r (replace-differential-tag oldtag newtag) object))
+	((matrix? object)
+	 ((m:elementwise (replace-differential-tag oldtag newtag)) object))
+	((quaternion? object)
+	 (let ((r (replace-differential-tag oldtag newtag)))
+	   (quaternion
+	    (r (quaternion-ref object 0))
+	    (r (quaternion-ref object 1))
+	    (r (quaternion-ref object 2))
+	    (r (quaternion-ref object 3)))))
+	((series? object)
+	 (make-series (g:arity object)
+		      (map-stream (replace-differential-tag oldtag newtag)
+				  (series->stream object))))
+
+        ((function? object)
+         ((replace-dx-function newtag oldtag) object))
+        ((operator? object)
+         ((replace-dx-operator newtag oldtag) object))
+
+	(else object)))
+
+(define ((replace-dx-function newtag oldtag) object)
+  (lambda args
+    (let ((eps (make-differential-tag)))
+      ((replace-differential-tag eps oldtag)
+       ((replace-differential-tag oldtag newtag)
+        (apply object
+               (map (replace-differential-tag oldtag eps)
+                    args)))))))
+
+(define (replace-dx-operator newtag oldtag)
+  (replace-dx-function newtag oldtag))
+
+(define (remove-differential-tag tag tags) (delv tag tags))
+
+(define (insert-differential-tag tag tags)
+  (cond ((null? tags) (list tag))
+	((<dt tag (car tags)) (cons tag tags))
+	((=dt tag (car tags))
+	 (error "INSERT-DIFFERENTIAL-TAGS:" tag tags))
+	(else
+	 (cons (car tags)
+	       (insert-differential-tag tag (cdr tags))))))
+
+#|
+;;; Superseded on 18 May 2019.  A new bug report by Jeff Siskind
+;;; precipitated a rewrite.  The result is simpler and fixes the
+;;; very subtle bug he observed.
+
 (define (extract-dx-part dx obj)
   (define (extract obj)
     (if (differential? obj)
@@ -875,8 +979,11 @@ USA.
 (define ((hide-tag-in-procedure external-tag procedure) . args)
   (let ((internal-tag (make-differential-tag)))
     (hide-tag-in-object internal-tag
-      (apply (wrap-procedure-differential-tags external-tag internal-tag procedure) args))))
-
+                        (apply (wrap-procedure-differential-tags external-tag
+                                                                 internal-tag
+                                                                 procedure)
+                               args))))
+
 (define (wrap-procedure-differential-tags external-tag internal-tag procedure)
   (let ((new
 	 (lambda args
@@ -891,7 +998,7 @@ USA.
 	  (else
 	   (error "Unknown procedure type -- WRAP-PROCEDURE-DIFFERENTIAL-TAGS:"
 		  external-tag internal-tag procedure)))))
-
+
 (define ((replace-differential-tag oldtag newtag) object)
   (cond ((differential? object)
 	 (terms->differential
@@ -923,8 +1030,7 @@ USA.
 				  (series->stream object))))
 	(else object)))
 
-(define (remove-differential-tag tag tags)
-  (delv tag tags))
+(define (remove-differential-tag tag tags) (delv tag tags))
 
 (define (insert-differential-tag tag tags)
   (cond ((null? tags) (list tag))
@@ -934,6 +1040,7 @@ USA.
 	(else
 	 (cons (car tags)
 	       (insert-differential-tag tag (cdr tags))))))
+|#
 
 #|     
 ;;; 2011 buggy version: did not handle derivative functions with multiple args

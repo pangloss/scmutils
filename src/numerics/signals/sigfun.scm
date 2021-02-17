@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 (declare (usual-integrations))
 ;;; A signal function has a span, the domain over which it may be
 ;;; nonzero.  The spans are ordered pairs of numbers.
@@ -68,6 +69,8 @@ USA.
   (sigfun:make (op (sigfun:procedure sigfun))
 	       (sigfun:span sigfun)))
 
+#|
+;;; Looks wrong...  Must intersect spans
 (define ((sigfun:binary-op op) sigfun1 sigfun2)
   (let ((span1 (sigfun:span sigfun1))
 	(span2 (sigfun:span sigfun2)))
@@ -77,6 +80,17 @@ USA.
 		 (sigfun:make-span
 		  (min (sigfun:min span1) (sigfun:min span2))
 		  (max (sigfun:max span1) (sigfun:max span2))))))
+|#
+
+(define ((sigfun:binary-op op) sigfun1 sigfun2)
+  (let ((span1 (sigfun:span sigfun1))
+	(span2 (sigfun:span sigfun2)))
+    (sigfun:make (lambda (x)
+		   (op ((sigfun:procedure sigfun1) x)
+		       ((sigfun:procedure sigfun2) x)))
+		 (sigfun:make-span
+		  (max (sigfun:min span1) (sigfun:min span2))
+		  (min (sigfun:max span1) (sigfun:max span2))))))
 	
 
 
@@ -182,6 +196,18 @@ USA.
 (assign-operation '/               sigfun:/              sigfun?  sigfun?)
 (assign-operation '/               sigfun:scale3         number?  sigfun?)
 (assign-operation '/               sigfun:scale4         sigfun?  number?)
+
+(assign-operation 'solve-linear-right    sigfun:/              sigfun?  sigfun?)
+(assign-operation 'solve-linear-right    sigfun:scale3         number?  sigfun?)
+(assign-operation 'solve-linear-right    sigfun:scale4         sigfun?  number?)
+
+(assign-operation 'solve-linear-left  (lambda (x y) (sigfun:/ y x))       sigfun?  sigfun?)
+(assign-operation 'solve-linear-left  (lambda (x y) (sigfun:scale3 y x))  sigfun?  number?)
+(assign-operation 'solve-linear-left  (lambda (x y) (sigfun:scale4 y x))  number?  sigfun?)
+
+(assign-operation 'solve-linear  (lambda (x y) (sigfun:/ y x))       sigfun?  sigfun?)
+(assign-operation 'solve-linear  (lambda (x y) (sigfun:scale3 y x))  sigfun?  number?)
+(assign-operation 'solve-linear  (lambda (x y) (sigfun:scale4 y x))  number?  sigfun?)
 
 (assign-operation 'expt            sigfun:expt           sigfun?  sigfun?)
 (assign-operation 'expt            sigfun:expt2          number?  sigfun?)

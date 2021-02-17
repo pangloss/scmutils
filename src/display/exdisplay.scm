@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; DISPLAY-EXPRESSION
 
 ;;; This is a package of expression display programs for Scmutils.
@@ -259,7 +260,7 @@ USA.
 (define (make-blank-line-elts width)
   (if (= width 0)
       '()
-      (list (make-string width #\SPACE))))
+      (list (make-string width #\space))))
 
 
 ;;;; Operations for combining boxes
@@ -421,7 +422,7 @@ USA.
 	  (map (lambda (string)
 		 (string-append (make-string
 				 (- width (string-length string))
-				 #\SPACE)
+				 #\space)
 				string))
 	       strings))
 	 (lines (map (lambda (string)
@@ -790,6 +791,11 @@ USA.
     (list (tex:unparse-subscript uptable (cons "\\partial" (cdr args)))
 	  (insure-bp uptable 140 (car args))))))
 
+(define (tex:unparse-partial uptable args)
+  (make-box-with-bp
+   140
+   (tex:unparse-subscript uptable (cons "\\partial" args))))
+
 (define (2d:unparse-nth-derivative uptable args)
   (let ((op (2d:unparse-expt uptable (list "D" (cadr args)))))
     (make-box-with-bp
@@ -975,6 +981,7 @@ USA.
     (second-derivative ,tex:unparse-second-derivative)
     (nth-derivative ,tex:unparse-nth-derivative)
     (partial-derivative ,tex:unparse-partial-derivative)
+    (partial ,tex:unparse-partial)
     (subscript ,tex:unparse-subscript)
     (superscript ,tex:unparse-superscript)
     (vector ,tex:unparse-vector)
@@ -1305,7 +1312,7 @@ USA.
   (lambda (exp)
     (set! last-tex-string-generated (expression->tex-string exp))
     (let ((name (graphics-type-name (graphics-type #f))))
-      (if (and (eq? name 'X) enable-tex-display)
+      (if (and (memq name '(x x11)) enable-tex-display)
 	  (begin (display-in-screen-window last-tex-string-generated)
 		 (newline)
 		 (newline)

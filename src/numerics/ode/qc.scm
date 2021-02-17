@@ -1,29 +1,30 @@
-#| -*-Scheme-*-
+#| -*- Scheme -*-
 
-Copyright (C) 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994,
-    1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-    2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014 Massachusetts
-    Institute of Technology
+Copyright (c) 1987, 1988, 1989, 1990, 1991, 1995, 1997, 1998,
+              1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+              2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014,
+              2015, 2016, 2017, 2018, 2019, 2020
+            Massachusetts Institute of Technology
 
-This file is part of MIT/GNU Scheme.
+This file is part of MIT scmutils.
 
-MIT/GNU Scheme is free software; you can redistribute it and/or modify
+MIT scmutils is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or (at
 your option) any later version.
 
-MIT/GNU Scheme is distributed in the hope that it will be useful, but
+MIT scmutils is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with MIT/GNU Scheme; if not, write to the Free Software
+along with MIT scmutils; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 USA.
 
 |#
-
+
 ;;;; Quality-controlled adaptive integrators.
 
 (declare (usual-integrations))
@@ -52,64 +53,76 @@ USA.
 ;;; some similar disaster.
 
 (define (quality-control method order)
-  (let ((2^order (expt 2.0 order))
-	(error-scale-down (/ -1.0 (+ (exact->inexact order) 1.0)))
-	(error-scale-up (/ -1.0 (exact->inexact order))))
-    (let ((halfweight (v:scale (/ 2^order (- 2^order 1.0))))
-	  (fullweight (v:scale (/ 1.0 (- 2^order 1.0))))
-	  (h-adjust-down
-	    (lambda (h err)
-	      (* qc-damping h (expt (max err qc-zero-protect) error-scale-down))))
-	  (h-adjust-up
-	    (lambda (h err)
-	      (* qc-damping h (expt (max err qc-zero-protect) error-scale-up)))))
+  (let* ((2^order (expt 2.0 order))
+         (h-adjust-exponent (/ -1.0 (+ (exact->inexact order) 1.0)))
+         (h-adjust-exponent-press (/ -1.0 (exact->inexact order)))
+         (half-weight-scale (/ 2^order (- 2^order 1.0))))
+    (let ((halfweight (v:scale half-weight-scale))
+          (fullweight (v:scale (/ 1.0 (- 2^order 1.0))))
+          (h-adjust        ;Theory assuming error=A*h^(order+1)
+           (lambda (h err)
+             (* *qc-damping* h
+                (expt (* half-weight-scale (max err *qc-zero-protect*))
+                      h-adjust-exponent))))
+          (h-adjust-press  ;Numerical recipes prescription
+           (lambda (h err)
+             (* *qc-damping* h
+                (expt (* half-weight-scale (max err *qc-zero-protect*))
+                      h-adjust-exponent-press)))))
       (define (qc-stepper-maker der tolerance . others)
-	(let ((error-measure (parse-error-measure tolerance))
-	      (mder (apply method der tolerance others)))
-	  (define (qc-stepper state h-init continue)
-	    (let ((stepper (mder state)))
-	      (if qc-wallp? (write-line `(qc state: ,state)))
-	      (let loop ((h h-init))
-		(if qc-wallp? (write-line `(qc h: ,h)))
-		(let ((h/2 (* 0.5 h)))
-		  (stepper		;first halfstep
-		   h/2
-		   (lambda (halfstep nh) ;first halfstep succeeded
-		     ((mder halfstep)	;second halfstep
-		      h/2
-		      (lambda (2halfsteps n2h) ;second halfstep succeeded
-			(stepper
-			 h
-			 (lambda (fullstep nf) ;fullstep succeeded
-			   (let ((err (error-measure 2halfsteps fullstep)))
-			     (if qc-wallp?
-				 (write-line `(qc fullstep err: ,err ,nh ,n2h ,nf)))
-			     (if (> err *qc-trigger-point*) 
-				 (loop (h-adjust-up h err))
-				 (continue (vector-vector (halfweight 2halfsteps)
-							  (fullweight fullstep))
-					   h
-					   (h-adjust-down h err)))))
-			 (lambda ()	;fullstep failed
-			   (if qc-wallp? (write-line `(qc: fullstep failed)))
-			   (loop (* *qc-fullstep-reduction-factor* h)))))
-		      (lambda ()	;second halfstep failed
-			(if qc-wallp? (write-line `(qc: second halfstep failed)))
-			(loop (* *qc-2halfsteps-reduction-factor* h)))))
-		   (lambda ()		;first halfstep failed
-		     (if qc-wallp? (write-line `(qc: first halfstep failed)))
-		     (loop (* *qc-halfstep-reduction-factor* h))))))))
-	  qc-stepper))
+        (let ((error-measure (parse-error-measure tolerance))
+              (mder (apply method der tolerance others)))
+          (define (qc-stepper state h-init continue)
+            (let ((stepper (mder state)))
+              (if *qc-wallp? (write-line `(qc state: ,state)))
+              (let loop ((h h-init))
+                (if *qc-wallp? (write-line `(qc h: ,h)))
+                (let ((h/2 (* 0.5 h)))
+                  (stepper              ;first halfstep
+                   h/2
+                   (lambda (halfstep nh)   ;first halfstep succeeded
+                     ((mder halfstep)      ;second halfstep
+                      h/2
+                      (lambda (2halfsteps n2h) ;second halfstep succeeded
+                        (stepper
+                         h
+                         (lambda (fullstep nf) ;fullstep succeeded
+                           (let* ((err (error-measure 2halfsteps fullstep))
+                                  (next-h ))
+                             (if *qc-wallp?
+                                 (write-line
+                                  `(qc fullstep err: ,err ,nh ,n2h ,nf)))
+                             (if (> err *qc-trigger-point*)
+                                 (loop (if *qc-press*   ;fails error spec.
+                                           (h-adjust-press h err)
+                                           (h-adjust h err)))
+                                 (let ((good-state
+                                        (vector-vector (halfweight 2halfsteps)
+                                                       (fullweight fullstep))))
+                                   (continue good-state h (h-adjust h err))))))
+                         (lambda ()     ;fullstep failed
+                           (if *qc-wallp? (write-line `(qc: fullstep failed)))
+                           (loop (* *qc-fullstep-reduction-factor* h)))))
+                      (lambda ()        ;second halfstep failed
+                        (if *qc-wallp? (write-line `(qc: second halfstep failed)))
+                        (loop (* *qc-2halfsteps-reduction-factor* h)))))
+                   (lambda ()           ;first halfstep failed
+                     (if *qc-wallp? (write-line `(qc: first halfstep failed)))
+                     (loop (* *qc-halfstep-reduction-factor* h))))))))
+          qc-stepper))
       qc-stepper-maker)))
 
-(define *qc-trigger-point* 1.5)	; to make dead zone around 1.0 -- GJS
+(define *qc-trigger-point* 1.0)	 ; GJS
+(define *qc-damping* .9)
+
 (define *qc-halfstep-reduction-factor* 0.3) ;must be less than .5
 (define *qc-2halfsteps-reduction-factor* 0.5)
 (define *qc-fullstep-reduction-factor* 0.5)
 
-(define qc-wallp? false)
-(define qc-damping .9)
-(define qc-zero-protect 1.0e-20)
+(define *qc-press* #t)           ; "Numerical Recipes 1st edition" prescription
+
+(define *qc-wallp? false)
+(define *qc-zero-protect* 1.0e-20)
 
 ;;; A "simple" explicit method, based on fourth-order Runge-Kutta:
 
